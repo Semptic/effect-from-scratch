@@ -1,2 +1,3 @@
 # effect-from-scratch
-Try to implement a base version of zio on my own (just a playground)
+
+This is my take to understand how zio works. Try to implement a base version of zio on my own.
