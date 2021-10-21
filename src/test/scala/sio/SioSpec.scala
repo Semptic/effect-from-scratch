@@ -49,5 +49,12 @@ class SioSpec extends AnyFlatSpec with Matchers:
     prints.length shouldBe 2
     prints(0) shouldBe "Hello, world!"
     prints(1) shouldBe "Hello, world!"
+  }
 
+  it should "flatMap" in {
+    val sio = Sio.succeed(7)
+
+    val mapped = sio.flatMap(a => Sio.succeedNow(a * 7)).flatMap(a => Sio.succeedNow(a - 7))
+
+    mapped.runUnsafeSync shouldBe 42
   }
