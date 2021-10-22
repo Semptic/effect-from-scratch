@@ -49,8 +49,8 @@ object Sio:
 
   def async[A](f: (Sio[A] => Any) => Any): Sio[A] = Async(f)
 
-  case class Succeed[A](value: A)                extends Sio[A]
-  case class Effect[A](thunk: () => A)           extends Sio[A]
-  case class Async[A](f: (Sio[A] => Any) => Any) extends Sio[A]
+  private case class Succeed[A](value: A)                extends Sio[A]
+  private case class Effect[A](thunk: () => A)           extends Sio[A]
+  private case class Async[A](f: (Sio[A] => Any) => Any) extends Sio[A]
 
-  case class FlatMap[A, B](sio: Sio[A], cont: A => Sio[B]) extends Sio[B]
+  private case class FlatMap[A, B](sio: Sio[A], cont: A => Sio[B]) extends Sio[B]
