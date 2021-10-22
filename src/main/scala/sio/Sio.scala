@@ -39,26 +39,31 @@ private class FiberImpl[A](startSio: Sio[A]) extends Fiber[A]:
               case Running(waiter) =>
                 waiter.foreach(_.countDown())
               case _ =>
-
       else
         val cont = stack.pop()
         currentSio = cont(value)
 
-    while (loop) do
-      currentSio match
-        case Sio.Succeed(value) =>
-          complete(value)
-        case Sio.Effect(thunk) =>
-          complete(thunk())
-        case Sio.FlatMap(sio, cont) =>
-          currentSio = erase(sio)
-          stack.push(cont.asInstanceOf[Cont])
-        case Sio.Async(f) =>
-          f { sio =>
-            currentSio = sio
-          }
-        case Sio.Fork(sio) =>
-          currentSio = erase(Sio.succeedNow(new FiberImpl(sio)))
+    def runloop(): Unit =
+      while (loop) do
+        currentSio match
+          case Sio.Succeed(value) =>
+            complete(value)
+          case Sio.Effect(thunk) =>
+            complete(thunk())
+          case Sio.FlatMap(sio, cont) =>
+            currentSio = erase(sio)
+            stack.push(cont.asInstanceOf[Cont])
+          case Sio.Async(f) =>
+            loop = false
+            f { sio =>
+              currentSio = sio
+              loop = true
+              runloop()
+            }
+          case Sio.Fork(sio) =>
+            currentSio = erase(Sio.succeedNow(new FiberImpl(sio)))
+
+    runloop()
 
   override def join: Sio[A] =
     val latch = CountDownLatch(1)

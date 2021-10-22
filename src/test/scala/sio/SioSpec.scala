@@ -1,15 +1,18 @@
 package sio
 
 import org.scalatest.*
-import flatspec.AnyFlatSpec
-import matchers.should.*
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.*
 
 import java.util
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 class SioSpec extends AnyFlatSpec with Matchers:
 
   abstract class Fixture:
     var messages = new util.concurrent.ConcurrentLinkedQueue[String]()
+
     def println(msg: String): Unit =
       messages.add(msg)
 
@@ -84,16 +87,20 @@ class SioSpec extends AnyFlatSpec with Matchers:
     val sio = for {
       fiberA <- Sio
                   .async[Int] { complete =>
-                    Thread.sleep(2000)
-                    println("Hello, world!")
-                    complete(Sio.succeedNow(7))
+                    Future {
+                      Thread.sleep(2000)
+                      println("Hello, world!")
+                      complete(Sio.succeedNow(7))
+                    }
                   }
                   .fork
       fiberB <- Sio
                   .async[Int] { complete =>
-                    Thread.sleep(1000)
-                    println("Hello, sio!")
-                    complete(Sio.succeedNow(7))
+                    Future {
+                      Thread.sleep(1000)
+                      println("Hello, sio!")
+                      complete(Sio.succeedNow(7))
+                    }
                   }
                   .fork
       _ <- Sio.succeed(println("Hi, scala 3!"))
