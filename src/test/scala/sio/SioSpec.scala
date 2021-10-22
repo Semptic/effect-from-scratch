@@ -54,7 +54,31 @@ class SioSpec extends AnyFlatSpec with Matchers:
   it should "flatMap" in {
     val sio = Sio.succeed(7)
 
-    val mapped = sio.flatMap(a => Sio.succeedNow(a * 7)).flatMap(a => Sio.succeedNow(a - 7))
+    val mapped = sio
+      .flatMap(a =>
+        Sio.async[Int] { complete =>
+          val result = a * 7
+          complete(Sio.succeedNow(result))
+        }
+      )
+      .flatMap(a => Sio.succeedNow(a - 7))
 
     mapped.runUnsafeSync shouldBe 42
+  }
+
+  it should "map" in {
+    val sio = Sio.succeed(7)
+
+    val mapped = sio.map(a => a * 7).map(a => a - 7)
+
+    mapped.runUnsafeSync shouldBe 42
+  }
+
+  it should "zip" in {
+    val sio1 = Sio.succeed(8)
+    val sio2 = Sio.succeed(9)
+
+    val zipped = sio1 zip sio2
+
+    zipped.runUnsafeSync shouldBe (8, 9)
   }

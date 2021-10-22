@@ -4,6 +4,8 @@ import scala.collection.mutable.Stack
 
 trait Sio[+A]:
   final def flatMap[B](cont: A => Sio[B]): Sio[B] = Sio.FlatMap(this, cont)
+  final def map[B](cont: A => B): Sio[B]          = this.flatMap(a => Sio.succeed(cont(a)))
+  final def zip[B](that: Sio[B]): Sio[(A, B)]     = this.flatMap(a => that.flatMap(b => Sio.succeed((a, b))))
 
   final def runUnsafeSync: A =
     type Erased = Sio[Any]
