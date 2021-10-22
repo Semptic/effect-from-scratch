@@ -82,3 +82,13 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     zipped.runUnsafeSync shouldBe (8, 9)
   }
+
+  it should "for comprehension" in {
+    val sio = for {
+      a      <- Sio.succeed(7)
+      b      <- Sio.succeed(6)
+      result <- Sio.succeed(a * b)
+    } yield result
+
+    sio.runUnsafeSync shouldBe 42
+  }
