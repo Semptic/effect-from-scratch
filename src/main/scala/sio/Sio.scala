@@ -1,5 +1,6 @@
 package sio
 
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
@@ -8,7 +9,11 @@ trait Fiber[+A]:
   def join: Sio[A]
 
 private class FiberImpl[A](startSio: Sio[A]) extends Fiber[A]:
-  private val result = AtomicReference[Option[A]](None)
+  trait State
+  case class Done(result: A)                      extends State
+  case class Running(waiter: Seq[CountDownLatch]) extends State
+
+  private val currentState = AtomicReference[State](Running(Seq.empty))
   ExecutionContext.global.execute(run _)
 
   private def run() =
@@ -23,8 +28,18 @@ private class FiberImpl[A](startSio: Sio[A]) extends Fiber[A]:
 
     def complete(value: Any) =
       if (stack.isEmpty)
-        result.lazySet(Some(value.asInstanceOf[A]))
         loop = false
+
+        var ok = false
+        while (!ok) do
+          val state = currentState.get()
+          ok = currentState.compareAndSet(state, Done(value.asInstanceOf[A]))
+          if (ok)
+            state match
+              case Running(waiter) =>
+                waiter.foreach(_.countDown())
+              case _ =>
+
       else
         val cont = stack.pop()
         currentSio = cont(value)
@@ -46,9 +61,23 @@ private class FiberImpl[A](startSio: Sio[A]) extends Fiber[A]:
           currentSio = erase(Sio.succeedNow(new FiberImpl(sio)))
 
   override def join: Sio[A] =
-    while (result.get().isEmpty) do Thread.sleep(100)
+    val latch = CountDownLatch(1)
 
-    Sio.succeedNow(result.get().get)
+    var ok = false
+    while (!ok) do
+      val state = currentState.get()
+
+      state match
+        case Done(_) =>
+          latch.countDown()
+          ok = true
+        case running: Running =>
+          val newRunning = Running(running.waiter :+ latch)
+          ok = currentState.compareAndSet(running, newRunning)
+
+    latch.await()
+
+    Sio.succeedNow(currentState.get().asInstanceOf[Done].result)
 
 sealed trait Sio[+A]:
   final def flatMap[B](cont: A => Sio[B]): Sio[B] = Sio.FlatMap(this, cont)
@@ -59,8 +88,7 @@ sealed trait Sio[+A]:
 
   final def runUnsafeSync: A = runUnsafe.join.asInstanceOf[Sio.Succeed[A]].value
 
-  final def runUnsafe: Fiber[A] =
-    new FiberImpl[A](this)
+  final def runUnsafe: Fiber[A] = new FiberImpl[A](this)
 
 object Sio:
   def succeedNow[A](value: A): Sio[A]             = Succeed(value)
