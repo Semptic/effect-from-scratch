@@ -1,15 +1,17 @@
 package sio
 
-import org.scalatest._
+import org.scalatest.*
 import flatspec.AnyFlatSpec
-import matchers.should._
+import matchers.should.*
+
+import java.util
 
 class SioSpec extends AnyFlatSpec with Matchers:
 
   abstract class Fixture:
-    var messages = scala.collection.mutable.Buffer.empty[String]
+    var messages = new util.concurrent.ConcurrentLinkedQueue[String]()
     def println(msg: String): Unit =
-      messages.append(msg)
+      messages.add(msg)
 
   it should "run and return an value" in new Fixture:
     val sio = Sio.succeedNow(42)
@@ -22,9 +24,9 @@ class SioSpec extends AnyFlatSpec with Matchers:
     sio.runUnsafeSync shouldBe ()
     sio.runUnsafeSync shouldBe ()
 
-    messages.length shouldBe 2
-    messages(0) shouldBe "Hello, world!"
-    messages(1) shouldBe "Hello, world!"
+    messages.size() shouldBe 2
+    messages.poll() shouldBe "Hello, world!"
+    messages.poll() shouldBe "Hello, world!"
 
   it should "defere computation" in new Fixture:
     val sio = Sio.async { complete =>
@@ -36,9 +38,9 @@ class SioSpec extends AnyFlatSpec with Matchers:
     sio.runUnsafeSync shouldBe 42
     sio.runUnsafeSync shouldBe 42
 
-    messages.length shouldBe 2
-    messages(0) shouldBe "Hello, world!"
-    messages(1) shouldBe "Hello, world!"
+    messages.size() shouldBe 2
+    messages.poll() shouldBe "Hello, world!"
+    messages.poll() shouldBe "Hello, world!"
 
   it should "flatMap" in new Fixture:
     val sio = Sio.succeed(7)
@@ -107,10 +109,10 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
       result shouldBe 42
 
-      messages.length shouldBe 3
-      messages(0) shouldBe "Hi, scala 3!"
-      messages(1) shouldBe "Hello, sio!"
-      messages(2) shouldBe "Hello, world!"
+      messages.size() shouldBe 3
+      messages.poll() shouldBe "Hi, scala 3!"
+      messages.poll() shouldBe "Hello, sio!"
+      messages.poll() shouldBe "Hello, world!"
 
     withClue("First run:") {
       runTest()
