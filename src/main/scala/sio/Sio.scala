@@ -10,65 +10,46 @@ trait Fiber[+A]:
   def join: Sio[A]
 
 private class FiberImpl[A](startSio: Sio[A]) extends Fiber[A]:
-  sealed trait State
-  case class Done(result: A)                      extends State
-  case class Running(waiter: List[Sio[A] => Any]) extends State
+  type Erased = Sio[Any]
+  type Cont   = Any => Erased
+
+  private def erase[A](sio: Sio[A]): Erased = sio
+
+  private sealed trait State
+  private final case class Done(result: A)                      extends State
+  private final case class Running(waiter: List[Sio[A] => Any]) extends State
 
   private val currentState = AtomicReference[State](Running(List.empty))
+
+  private val stack      = Stack.empty[Cont]
+  private var currentSio = erase(startSio)
+  private var loop       = true
+
+  override def join: Sio[A] =
+    Sio.async(await)
+
   ExecutionContext.global.execute(run _)
 
-  private def run() =
-    type Erased = Sio[Any]
-    type Cont   = Any => Erased
+  private def complete(value: Any) =
+    if (stack.isEmpty)
+      loop = false
 
-    def erase[A](sio: Sio[A]): Erased = sio
+      var notOk = true
+      while (notOk) do
+        val state = currentState.get()
+        state match
+          case Running(callbacks) =>
+            if (currentState.compareAndSet(state, Done(value.asInstanceOf[A])))
+              notOk = false
+              val result = Sio.succeedNow(value.asInstanceOf[A])
+              callbacks.foreach(cb => cb(result))
+          case Done(_) =>
+            throw new Exception("Illegal state: Fiber completed multiple times")
+    else
+      val cont = stack.pop()
+      currentSio = cont(value)
 
-    val stack      = Stack.empty[Cont]
-    var currentSio = erase(startSio)
-    var loop       = true
-
-    def complete(value: Any) =
-      if (stack.isEmpty)
-        loop = false
-
-        var notOk = true
-        while (notOk) do
-          val state = currentState.get()
-          state match
-            case Running(callbacks) =>
-              if (currentState.compareAndSet(state, Done(value.asInstanceOf[A])))
-                notOk = false
-                val result = Sio.succeedNow(value.asInstanceOf[A])
-                callbacks.foreach(cb => cb(result))
-            case Done(_) =>
-              throw new Exception("Illegal state: Fiber completed multiple times")
-      else
-        val cont = stack.pop()
-        currentSio = cont(value)
-
-    def runloop(): Unit =
-      while (loop) do
-        currentSio match
-          case Sio.Succeed(value) =>
-            complete(value)
-          case Sio.Effect(thunk) =>
-            complete(thunk())
-          case Sio.FlatMap(sio, cont) =>
-            currentSio = erase(sio)
-            stack.push(cont.asInstanceOf[Cont])
-          case Sio.Async(f) =>
-            loop = false
-            f { sio =>
-              currentSio = sio
-              loop = true
-              runloop()
-            }
-          case Sio.Fork(sio) =>
-            currentSio = erase(Sio.succeedNow(new FiberImpl(sio)))
-
-    runloop()
-
-  def await(callback: Sio[A] => Any): Unit =
+  private def await(callback: Sio[A] => Any): Unit =
     var notOk = true
 
     while (notOk) do
@@ -82,8 +63,25 @@ private class FiberImpl[A](startSio: Sio[A]) extends Fiber[A]:
           notOk = false
           callback(Sio.succeedNow(value))
 
-  override def join: Sio[A] =
-    Sio.async(await)
+  private def run(): Unit =
+    while (loop) do
+      currentSio match
+        case Sio.Succeed(value) =>
+          complete(value)
+        case Sio.Effect(thunk) =>
+          complete(thunk())
+        case Sio.FlatMap(sio, cont) =>
+          currentSio = erase(sio)
+          stack.push(cont.asInstanceOf[Cont])
+        case Sio.Async(f) =>
+          loop = false
+          f { sio =>
+            currentSio = sio
+            loop = true
+            run()
+          }
+        case Sio.Fork(sio) =>
+          currentSio = erase(Sio.succeedNow(new FiberImpl(sio)))
 
 sealed trait Sio[+A]:
   final def flatMap[B](cont: A => Sio[B]): Sio[B] = Sio.FlatMap(this, cont)
