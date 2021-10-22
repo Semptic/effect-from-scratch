@@ -33,9 +33,11 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
   it should "defere computation" in new Fixture:
     val sio = Sio.async { complete =>
-      println("Hello, world!")
-      Thread.sleep(1000)
-      complete(Sio.succeedNow(42))
+      Future {
+        println("Hello, world!")
+        Thread.sleep(1000)
+        complete(Sio.succeedNow(42))
+      }
     }
 
     sio.runUnsafeSync shouldBe 42
@@ -51,8 +53,10 @@ class SioSpec extends AnyFlatSpec with Matchers:
     val mapped = sio
       .flatMap(a =>
         Sio.async[Int] { complete =>
-          val result = a * 7
-          complete(Sio.succeedNow(result))
+          Future {
+            val result = a * 7
+            complete(Sio.succeedNow(result))
+          }
         }
       )
       .flatMap(a => Sio.succeedNow(a - 7))
