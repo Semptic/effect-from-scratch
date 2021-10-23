@@ -162,21 +162,11 @@ class SioSpec extends AnyFlatSpec with Matchers:
       c <- fiberB.join
     } yield a * b - c
 
-    def runTest() =
-      messages.clear()
+    val result = sio.runUnsafeSync
 
-      val result = sio.runUnsafeSync
+    result shouldBe 42
 
-      result shouldBe 42
-
-      messages.size() shouldBe 3
-      messages.poll() shouldBe "Hi, scala 3!"
-      messages.poll() shouldBe "Hello, sio!"
-      messages.poll() shouldBe "Hello, world!"
-
-    withClue("First run:") {
-      runTest()
-    }
-    withClue("Second run:") {
-      runTest()
-    }
+    messages.size() shouldBe 3
+    messages.poll() shouldBe "Hi, scala 3!"
+    messages.poll() shouldBe "Hello, sio!"
+    messages.poll() shouldBe "Hello, world!"
