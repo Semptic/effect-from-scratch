@@ -1,5 +1,7 @@
 package sio
 
+import sio.Sio.async
+
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.Stack
@@ -25,8 +27,7 @@ private class FiberImpl[A](startSio: Sio[A]) extends Fiber[A]:
   private var currentSio = erase(startSio)
   private var loop       = true
 
-  override def join: Sio[A] =
-    Sio.async(await)
+  override def join: Sio[A] = Sio.async(await)
 
   ExecutionContext.global.execute(run _)
 
@@ -94,14 +95,13 @@ sealed trait Sio[+A]:
     val latch = new CountDownLatch(1)
 
     var result = null.asInstanceOf[A]
-    val program = for {
-      a <- Sio.async[A] { complete =>
-             val result = runUnsafe.join
-             complete(result)
-           }
-      _ <- Sio.succeed { result = a }
-      _ <- Sio.succeed(latch.countDown())
-    } yield ()
+
+    val program = this.flatMap(a =>
+      Sio.succeed {
+        result = a
+        latch.countDown()
+      }
+    )
 
     program.runUnsafe
 
