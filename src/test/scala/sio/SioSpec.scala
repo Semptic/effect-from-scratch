@@ -78,6 +78,55 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     zipped.runUnsafeSync shouldBe (8, 9)
 
+  it should "zipWith" in new Fixture:
+    val sio1 = Sio.succeed(7)
+    val sio2 = Sio.succeed(6)
+
+    val zipped = sio1.zipWith(sio2)((a, b) => a * b)
+
+    zipped.runUnsafeSync shouldBe 42
+
+  it should "zipRight" in new Fixture:
+    val sio1 = Sio.succeed(0)
+    val sio2 = Sio.succeed(42)
+
+    val zipped = sio1.zipRight(sio2)
+
+    zipped.runUnsafeSync shouldBe 42
+
+  it should "repeat" in new Fixture:
+    val sio = Sio.succeed(println("Hello, world!"))
+
+    val repeated = sio.repeat(10)
+
+    repeated.runUnsafeSync shouldBe ()
+
+    messages.size() shouldBe 11
+    (0 until 11).foreach { _ =>
+      messages.poll() shouldBe "Hello, world!"
+    }
+
+  it should "repeat 0 times" in new Fixture:
+    val sio = Sio.succeed(println("Hello, world!"))
+
+    val repeated = sio.repeat(0)
+
+    repeated.runUnsafeSync shouldBe ()
+
+    messages.size() shouldBe 1
+    messages.poll() shouldBe "Hello, world!"
+
+  it should "be stack-safe" in new Fixture:
+    val n    = 10_000_000
+    var runs = 0
+    val sio  = Sio.succeed(runs += 1)
+
+    val repeated = sio.repeat(n - 1)
+
+    repeated.runUnsafeSync shouldBe ()
+
+    runs shouldBe n
+
   it should "for comprehension" in new Fixture:
     val sio = for {
       a      <- Sio.succeed(7)
