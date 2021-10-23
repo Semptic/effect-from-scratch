@@ -31,21 +31,24 @@ private class FiberImpl[A](startSio: Sio[A]) extends Fiber[A]:
 
   ExecutionContext.global.execute(run _)
 
-  private def complete(value: Any) =
+  private def complete(value: A) = {
+    var notOk = true
+    while (notOk) do
+      val state = currentState.get()
+      state match
+        case Running(callbacks) =>
+          if (currentState.compareAndSet(state, Done(value)))
+            notOk = false
+            val result = Sio.succeedNow(value)
+            callbacks.foreach(cb => cb(result))
+        case Done(_) =>
+          throw new Exception("Illegal state: Fiber completed multiple times")
+  }
+
+  private def continueOrComplete(value: Any) =
     if (stack.isEmpty)
       loop = false
-
-      var notOk = true
-      while (notOk) do
-        val state = currentState.get()
-        state match
-          case Running(callbacks) =>
-            if (currentState.compareAndSet(state, Done(value.asInstanceOf[A])))
-              notOk = false
-              val result = Sio.succeedNow(value.asInstanceOf[A])
-              callbacks.foreach(cb => cb(result))
-          case Done(_) =>
-            throw new Exception("Illegal state: Fiber completed multiple times")
+      complete(value.asInstanceOf[A])
     else
       val cont = stack.pop()
       currentSio = cont(value)
@@ -68,9 +71,9 @@ private class FiberImpl[A](startSio: Sio[A]) extends Fiber[A]:
     while (loop) do
       currentSio match
         case Sio.Succeed(value) =>
-          complete(value)
+          continueOrComplete(value)
         case Sio.Effect(thunk) =>
-          complete(thunk())
+          continueOrComplete(thunk())
         case Sio.FlatMap(sio, cont) =>
           currentSio = erase(sio)
           stack.push(cont.asInstanceOf[Cont])
@@ -92,8 +95,7 @@ sealed trait Sio[+A]:
   final def fork: Sio[Fiber[A]] = Sio.Fork(this)
 
   final def runUnsafeSync: A =
-    val latch = new CountDownLatch(1)
-
+    val latch  = new CountDownLatch(1)
     var result = null.asInstanceOf[A]
 
     val program = this.flatMap(a =>
@@ -104,9 +106,7 @@ sealed trait Sio[+A]:
     )
 
     program.runUnsafe
-
     latch.await()
-
     result
 
   final def runUnsafe: Fiber[A] = new FiberImpl[A](this)
