@@ -5,6 +5,8 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.*
 
 import java.util
+import java.util.concurrent.Executors
+import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
@@ -170,3 +172,30 @@ class SioSpec extends AnyFlatSpec with Matchers:
     messages.poll() shouldBe "Hi, scala 3!"
     messages.poll() shouldBe "Hello, sio!"
     messages.poll() shouldBe "Hello, world!"
+
+  it should "change the execution context" in new Fixture:
+    val async = Sio.async[Long] { complete =>
+      Thread.sleep(1000)
+      println("Hello, sio!")
+      complete(Sio.succeedNow(Thread.currentThread().getId))
+    }
+
+    val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
+
+    val shifted = Sio.shift(ec).zipRight(async)
+
+    val program = for {
+      fiberA <- async.fork
+      fiberB <- shifted.fork
+      fiberC <- shifted.fork
+      a      <- fiberA.join
+      b      <- fiberB.join
+      c      <- fiberC.join
+    } yield (a, b, c)
+
+    val (threadIdA, threadIdB, threadIdC) = program.runUnsafeSync
+
+    threadIdA should not be threadIdB
+    threadIdA should not be threadIdC
+
+    threadIdB shouldBe threadIdB
