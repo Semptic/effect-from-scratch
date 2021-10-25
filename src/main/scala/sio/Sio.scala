@@ -9,19 +9,21 @@ import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 
-trait Fiber[+A]:
-  def join: Sio[A]
+trait Fiber[+E, +A]:
+  def join: Sio[E, A]
 
-private class FiberImpl[A](startSio: Sio[A], startExecutionContext: ExecutionContext = Sio.defaultExecutionContext)
-    extends Fiber[A]:
-  type Erased = Sio[Any]
+private class FiberImpl[E, A](
+  startSio: Sio[E, A],
+  startExecutionContext: ExecutionContext = Sio.defaultExecutionContext
+) extends Fiber[E, A]:
+  type Erased = Sio[Any, Any]
   type Cont   = Any => Erased
 
-  private def erase[A](sio: Sio[A]): Erased = sio
+  private def erase[E, A](sio: Sio[E, A]): Erased = sio.asInstanceOf[Erased]
 
   private sealed trait State
-  private final case class Done(result: A)                      extends State
-  private final case class Running(waiter: List[Sio[A] => Any]) extends State
+  private final case class Done(result: A)                         extends State
+  private final case class Running(waiter: List[Sio[E, A] => Any]) extends State
 
   private val currentState = AtomicReference[State](Running(List.empty))
 
@@ -30,7 +32,7 @@ private class FiberImpl[A](startSio: Sio[A], startExecutionContext: ExecutionCon
   private var currentEc  = startExecutionContext
   private var loop       = true
 
-  override def join: Sio[A] = Sio.async(await)
+  override def join: Sio[E, A] = Sio.async(await)
 
   startExecutionContext.execute(run _)
 
@@ -56,7 +58,7 @@ private class FiberImpl[A](startSio: Sio[A], startExecutionContext: ExecutionCon
       val cont = stack.pop()
       currentSio = cont(value)
 
-  private def await(callback: Sio[A] => Any): Unit =
+  private def await(callback: Sio[E, A] => Any): Unit =
     var notOk = true
 
     while (notOk) do
@@ -73,9 +75,9 @@ private class FiberImpl[A](startSio: Sio[A], startExecutionContext: ExecutionCon
   private def run(): Unit =
     while (loop) do
       currentSio match
-        case Sio.Succeed(value) =>
+        case Sio.SucceedNow(value) =>
           continueOrComplete(value)
-        case Sio.Effect(thunk) =>
+        case Sio.Succeed(thunk) =>
           continueOrComplete(thunk())
         case Sio.FlatMap(sio, cont) =>
           currentSio = erase(sio)
@@ -94,30 +96,31 @@ private class FiberImpl[A](startSio: Sio[A], startExecutionContext: ExecutionCon
           currentEc = ec
           continueOrComplete(())
 
-sealed trait Sio[+A]:
-  final def flatMap[B](cont: A => Sio[B]): Sio[B]       = Sio.FlatMap(this, cont)
-  final def map[B](cont: A => B): Sio[B]                = this.flatMap(a => Sio.succeedNow(cont(a)))
-  final def zip[B](that: Sio[B]): Sio[(A, B)]           = this.zipWith(that)((a, b) => (a, b))
-  final def zipWith[B, C](that: Sio[B])(f: (A, B) => C) = this.flatMap(a => that.flatMap(b => Sio.succeedNow(f(a, b))))
-  final def zipRight[B](that: Sio[B]): Sio[B]           = this.zipWith(that)((_, b) => b)
-  final def *>[B](that: Sio[B]): Sio[B]                 = zipRight(that)
-  final def repeat(n: Int): Sio[A] =
+sealed trait Sio[+E, +A]:
+  final def flatMap[E1 >: E, B](cont: A => Sio[E1, B]): Sio[E1, B] = Sio.FlatMap(this, cont)
+  final def map[B](cont: A => B): Sio[E, B]                        = this.flatMap(a => Sio.succeedNow(cont(a)))
+  final def zip[E1 >: E, B](that: Sio[E1, B]): Sio[E1, (A, B)]     = this.zipWith(that)((a, b) => (a, b))
+  final def zipWith[E1 >: E, B, C](that: Sio[E1, B])(f: (A, B) => C): Sio[E1, C] =
+    this.flatMap(a => that.flatMap(b => Sio.succeedNow(f(a, b))))
+  final def zipRight[E1 >: E, B](that: Sio[E1, B]): Sio[E1, B] = this.zipWith(that)((_, b) => b)
+  final def *>[E1 >: E, B](that: Sio[E1, B]): Sio[E1, B]       = zipRight(that)
+  final def repeat(n: Int): Sio[E, A] =
     @tailrec
-    def repeat(n: Int, sio: Sio[A]): Sio[A] =
+    def repeat(n: Int, sio: Sio[E, A]): Sio[E, A] =
       if (n <= 0) sio
       else repeat(n - 1, sio.zipRight(this))
 
     repeat(n, this)
 
-  final def fork: Sio[Fiber[A]] = Sio.Fork(this)
+  final def fork: Sio[Nothing, Fiber[E, A]] = Sio.Fork(this)
 
-  final def runUnsafeSync: A =
+  final def runUnsafeSync: Either[E, A] =
     val latch  = new CountDownLatch(1)
-    var result = null.asInstanceOf[A]
+    var result = null.asInstanceOf[Either[E, A]]
 
     val program = this.flatMap(a =>
       Sio.succeed {
-        result = a
+        result = Right(a)
         latch.countDown()
       }
     )
@@ -126,22 +129,22 @@ sealed trait Sio[+A]:
     latch.await()
     result
 
-  final def runUnsafe: Fiber[A] = new FiberImpl[A](this)
+  final def runUnsafe: Fiber[E, A] = new FiberImpl(this)
 
 object Sio:
   private[sio] def defaultExecutionContext = ExecutionContext.global
 
-  def succeedNow[A](value: A): Sio[A]             = Succeed(value)
-  def succeed[A](thunk: => A): Sio[A]             = Effect(() => thunk)
-  def async[A](f: (Sio[A] => Any) => Any): Sio[A] = Async(f)
+  def succeedNow[A](value: A): Sio[Nothing, A]             = SucceedNow(value)
+  def succeed[A](thunk: => A): Sio[Nothing, A]             = Succeed(() => thunk)
+  def async[E, A](f: (Sio[E, A] => Any) => Any): Sio[E, A] = Async(f)
 
-  def shift(ec: ExecutionContext): Sio[Unit] = Sio.Shift(ec)
+  def shift(ec: ExecutionContext): Sio[Nothing, Unit] = Sio.Shift(ec)
 
-  private[sio] case class Succeed[A](value: A)                extends Sio[A]
-  private[sio] case class Effect[A](thunk: () => A)           extends Sio[A]
-  private[sio] case class Async[A](f: (Sio[A] => Any) => Any) extends Sio[A]
+  private[sio] case class SucceedNow[A](value: A)                   extends Sio[Nothing, A]
+  private[sio] case class Succeed[A](thunk: () => A)                extends Sio[Nothing, A]
+  private[sio] case class Async[E, A](f: (Sio[E, A] => Any) => Any) extends Sio[E, A]
 
-  private[sio] case class FlatMap[A, B](sio: Sio[A], cont: A => Sio[B]) extends Sio[B]
+  private[sio] case class FlatMap[E, A, B](sio: Sio[E, A], cont: A => Sio[E, B]) extends Sio[E, B]
 
-  private[sio] case class Fork[A](sio: Sio[A])                      extends Sio[Fiber[A]]
-  private[sio] case class Shift(executionContext: ExecutionContext) extends Sio[Unit]
+  private[sio] case class Fork[E, A](sio: Sio[E, A])                extends Sio[Nothing, Fiber[E, A]]
+  private[sio] case class Shift(executionContext: ExecutionContext) extends Sio[Nothing, Unit]

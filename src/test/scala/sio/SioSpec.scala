@@ -21,13 +21,13 @@ class SioSpec extends AnyFlatSpec with Matchers:
   it should "run and return an value" in new Fixture:
     val sio = Sio.succeedNow(42)
 
-    sio.runUnsafeSync shouldBe 42
+    sio.runUnsafeSync shouldBe Right(42)
 
   it should "run side effects only if run" in new Fixture:
     val sio = Sio.succeed(println("Hello, world!"))
 
-    sio.runUnsafeSync shouldBe ()
-    sio.runUnsafeSync shouldBe ()
+    sio.runUnsafeSync shouldBe Right(())
+    sio.runUnsafeSync shouldBe Right(())
 
     messages.size() shouldBe 2
     messages.poll() shouldBe "Hello, world!"
@@ -42,8 +42,8 @@ class SioSpec extends AnyFlatSpec with Matchers:
       }
     }
 
-    sio.runUnsafeSync shouldBe 42
-    sio.runUnsafeSync shouldBe 42
+    sio.runUnsafeSync shouldBe Right(42)
+    sio.runUnsafeSync shouldBe Right(42)
 
     messages.size() shouldBe 2
     messages.poll() shouldBe "Hello, world!"
@@ -54,7 +54,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val mapped = sio
       .flatMap(a =>
-        Sio.async[Int] { complete =>
+        Sio.async[Nothing, Int] { complete =>
           Future {
             val result = a * 7
             complete(Sio.succeedNow(result))
@@ -63,14 +63,14 @@ class SioSpec extends AnyFlatSpec with Matchers:
       )
       .flatMap(a => Sio.succeedNow(a - 7))
 
-    mapped.runUnsafeSync shouldBe 42
+    mapped.runUnsafeSync shouldBe Right(42)
 
   it should "map" in new Fixture:
     val sio = Sio.succeed(7)
 
     val mapped = sio.map(a => a * 7).map(a => a - 7)
 
-    mapped.runUnsafeSync shouldBe 42
+    mapped.runUnsafeSync shouldBe Right(42)
 
   it should "zip" in new Fixture:
     val sio1 = Sio.succeed(8)
@@ -78,7 +78,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val zipped = sio1 zip sio2
 
-    zipped.runUnsafeSync shouldBe (8, 9)
+    zipped.runUnsafeSync shouldBe Right((8, 9))
 
   it should "zipWith" in new Fixture:
     val sio1 = Sio.succeed(7)
@@ -86,7 +86,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val zipped = sio1.zipWith(sio2)((a, b) => a * b)
 
-    zipped.runUnsafeSync shouldBe 42
+    zipped.runUnsafeSync shouldBe Right(42)
 
   it should "zipRight" in new Fixture:
     val sio1 = Sio.succeed(0)
@@ -94,14 +94,14 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val zipped = sio1.zipRight(sio2)
 
-    zipped.runUnsafeSync shouldBe 42
+    zipped.runUnsafeSync shouldBe Right(42)
 
   it should "repeat" in new Fixture:
     val sio = Sio.succeed(println("Hello, world!"))
 
     val repeated = sio.repeat(10)
 
-    repeated.runUnsafeSync shouldBe ()
+    repeated.runUnsafeSync shouldBe Right(())
 
     messages.size() shouldBe 11
     (0 until 11).foreach { _ =>
@@ -113,7 +113,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val repeated = sio.repeat(0)
 
-    repeated.runUnsafeSync shouldBe ()
+    repeated.runUnsafeSync shouldBe Right(())
 
     messages.size() shouldBe 1
     messages.poll() shouldBe "Hello, world!"
@@ -125,7 +125,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val repeated = sio.repeat(n - 1)
 
-    repeated.runUnsafeSync shouldBe ()
+    repeated.runUnsafeSync shouldBe Right(())
 
     runs shouldBe n
 
@@ -136,12 +136,12 @@ class SioSpec extends AnyFlatSpec with Matchers:
       result <- Sio.succeed(a * b)
     } yield result
 
-    sio.runUnsafeSync shouldBe 42
+    sio.runUnsafeSync shouldBe Right(42)
 
   it should "run on multiple threads" in new Fixture:
     val sio = for {
       fiberA <- Sio
-                  .async[Int] { complete =>
+                  .async[Nothing, Int] { complete =>
                     Future {
                       Thread.sleep(2000)
                       println("Hello, world!")
@@ -150,7 +150,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
                   }
                   .fork
       fiberB <- Sio
-                  .async[Int] { complete =>
+                  .async[Nothing, Int] { complete =>
                     Future {
                       Thread.sleep(1000)
                       println("Hello, sio!")
@@ -166,7 +166,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val result = sio.runUnsafeSync
 
-    result shouldBe 42
+    result shouldBe Right(42)
 
     messages.size() shouldBe 3
     messages.poll() shouldBe "Hi, scala 3!"
@@ -174,7 +174,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     messages.poll() shouldBe "Hello, world!"
 
   it should "change the execution context" in new Fixture:
-    val async = Sio.async[Long] { complete =>
+    val async = Sio.async[Nothing, Long] { complete =>
       Thread.sleep(1000)
       println("Hello, sio!")
       complete(Sio.succeedNow(Thread.currentThread().getId))
@@ -193,7 +193,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
       c      <- fiberC.join
     } yield (a, b, c)
 
-    val (threadIdA, threadIdB, threadIdC) = program.runUnsafeSync
+    val Right((threadIdA, threadIdB, threadIdC)) = program.runUnsafeSync
 
     threadIdA should not be threadIdB
     threadIdA should not be threadIdC
