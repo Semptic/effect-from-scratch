@@ -98,8 +98,9 @@ sealed trait Sio[+A]:
   final def flatMap[B](cont: A => Sio[B]): Sio[B]       = Sio.FlatMap(this, cont)
   final def map[B](cont: A => B): Sio[B]                = this.flatMap(a => Sio.succeedNow(cont(a)))
   final def zip[B](that: Sio[B]): Sio[(A, B)]           = this.zipWith(that)((a, b) => (a, b))
-  final def zipWith[B, C](that: Sio[B])(f: (A, B) => C) = that.flatMap(b => this.flatMap(a => Sio.succeedNow(f(a, b))))
+  final def zipWith[B, C](that: Sio[B])(f: (A, B) => C) = this.flatMap(a => that.flatMap(b => Sio.succeedNow(f(a, b))))
   final def zipRight[B](that: Sio[B]): Sio[B]           = this.zipWith(that)((_, b) => b)
+  final def *>[B](that: Sio[B]): Sio[B]                 = zipRight(that)
   final def repeat(n: Int): Sio[A] =
     @tailrec
     def repeat(n: Int, sio: Sio[A]): Sio[A] =

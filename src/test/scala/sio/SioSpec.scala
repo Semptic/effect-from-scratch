@@ -182,7 +182,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
 
-    val shifted = Sio.shift(ec).zipRight(async)
+    val shifted = Sio.shift(ec) *> async
 
     val program = for {
       fiberA <- async.fork
