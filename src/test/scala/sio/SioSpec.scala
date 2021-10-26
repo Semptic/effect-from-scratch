@@ -219,3 +219,21 @@ class SioSpec extends AnyFlatSpec with Matchers:
     program.runUnsafeSync shouldBe Left("Noooooooo")
 
     messages.size() shouldBe 0
+
+  it should "catch errors" in new Fixture:
+    val program = Sio
+      .fail("Noooooooo")
+      .map { _ =>
+        sendMessage("Map")
+        0
+      }
+      .catchAll { e =>
+        sendMessage(e)
+        Sio.succeed(())
+      }
+      .zipRight(Sio.succeed(42))
+
+    program.runUnsafeSync shouldBe Right(42)
+
+    messages.size() shouldBe 1
+    messages.poll() shouldBe "Noooooooo"

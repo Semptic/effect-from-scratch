@@ -130,19 +130,24 @@ private class FiberImpl[E, A](
           stack.push(ErrorAndSucceessContinuation(failure.asInstanceOf[Cont], success.asInstanceOf[Cont]))
 
 sealed trait Sio[+E, +A]:
+  final def catchAll[E2, B >: A](failure: E => Sio[E2, B]): Sio[E2, B] =
+    this.fold(failure, a => Sio.succeedNow(a))
   final def fold[E2, B](failure: E => Sio[E2, B], success: A => Sio[E2, B]): Sio[E2, B] =
     Sio.Fold(this, failure, success)
   final def foldBoth[E1 >: E, B](f: Either[E, A] => Sio[E1, B]): Sio[E1, B] = fold(
     e => f(Left(e)),
     a => f(Right(a))
   )
+
   final def flatMap[E1 >: E, B](cont: A => Sio[E1, B]): Sio[E1, B] = Sio.FlatMap(this, cont)
   final def map[B](cont: A => B): Sio[E, B]                        = this.flatMap(a => Sio.succeedNow(cont(a)))
-  final def zip[E1 >: E, B](that: Sio[E1, B]): Sio[E1, (A, B)]     = this.zipWith(that)((a, b) => (a, b))
+
+  final def zip[E1 >: E, B](that: Sio[E1, B]): Sio[E1, (A, B)] = this.zipWith(that)((a, b) => (a, b))
   final def zipWith[E1 >: E, B, C](that: Sio[E1, B])(f: (A, B) => C): Sio[E1, C] =
     this.flatMap(a => that.flatMap(b => Sio.succeedNow(f(a, b))))
   final def zipRight[E1 >: E, B](that: Sio[E1, B]): Sio[E1, B] = this.zipWith(that)((_, b) => b)
   final def *>[E1 >: E, B](that: Sio[E1, B]): Sio[E1, B]       = zipRight(that)
+
   final def repeat(n: Int): Sio[E, A] =
     @tailrec
     def repeat(n: Int, sio: Sio[E, A]): Sio[E, A] =
