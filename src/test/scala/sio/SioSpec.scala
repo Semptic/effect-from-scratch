@@ -15,7 +15,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
   abstract class Fixture:
     var messages = new util.concurrent.ConcurrentLinkedQueue[String]()
 
-    def println(msg: String): Unit =
+    def sendMessage(msg: String): Unit =
       messages.add(msg)
 
   it should "run and return an value" in new Fixture:
@@ -24,7 +24,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     sio.runUnsafeSync shouldBe Right(42)
 
   it should "run side effects only if run" in new Fixture:
-    val sio = Sio.succeed(println("Hello, world!"))
+    val sio = Sio.succeed(sendMessage("Hello, world!"))
 
     sio.runUnsafeSync shouldBe Right(())
     sio.runUnsafeSync shouldBe Right(())
@@ -36,7 +36,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
   it should "defere computation" in new Fixture:
     val sio = Sio.async { complete =>
       Future {
-        println("Hello, world!")
+        sendMessage("Hello, world!")
         Thread.sleep(1000)
         complete(Sio.succeedNow(42))
       }
@@ -97,7 +97,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     zipped.runUnsafeSync shouldBe Right(42)
 
   it should "repeat" in new Fixture:
-    val sio = Sio.succeed(println("Hello, world!"))
+    val sio = Sio.succeed(sendMessage("Hello, world!"))
 
     val repeated = sio.repeat(10)
 
@@ -109,7 +109,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     }
 
   it should "repeat 0 times" in new Fixture:
-    val sio = Sio.succeed(println("Hello, world!"))
+    val sio = Sio.succeed(sendMessage("Hello, world!"))
 
     val repeated = sio.repeat(0)
 
@@ -144,7 +144,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
                   .async[Nothing, Int] { complete =>
                     Future {
                       Thread.sleep(2000)
-                      println("Hello, world!")
+                      sendMessage("Hello, world!")
                       complete(Sio.succeedNow(7))
                     }
                   }
@@ -153,12 +153,12 @@ class SioSpec extends AnyFlatSpec with Matchers:
                   .async[Nothing, Int] { complete =>
                     Future {
                       Thread.sleep(1000)
-                      println("Hello, sio!")
+                      sendMessage("Hello, sio!")
                       complete(Sio.succeedNow(7))
                     }
                   }
                   .fork
-      _ <- Sio.succeed(println("Hi, scala 3!"))
+      _ <- Sio.succeed(sendMessage("Hi, scala 3!"))
       a <- fiberA.join
       b <- fiberA.join
       c <- fiberB.join
@@ -176,7 +176,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
   it should "change the execution context" in new Fixture:
     val async = Sio.async[Nothing, Long] { complete =>
       Thread.sleep(1000)
-      println("Hello, sio!")
+      sendMessage("Hello, sio!")
       complete(Sio.succeedNow(Thread.currentThread().getId))
     }
 
@@ -199,3 +199,23 @@ class SioSpec extends AnyFlatSpec with Matchers:
     threadIdA should not be threadIdC
 
     threadIdB shouldBe threadIdB
+
+  it should "fold" in new Fixture:
+    Sio.fail("Noooooooo").fold(_ => Sio.succeed(42), _ => Sio.succeed(0)).runUnsafeSync shouldBe Right(42)
+    Sio.succeed("Yeeeesss").fold(_ => Sio.succeed(0), _ => Sio.succeed(42)).runUnsafeSync shouldBe Right(42)
+
+    Sio.fail("Noooooooo").fold(_ => Sio.fail(42), _ => Sio.succeed(0)).runUnsafeSync shouldBe Left(42)
+    Sio.succeed("Yeeeesss").fold(_ => Sio.succeed(0), _ => Sio.fail(42)).runUnsafeSync shouldBe Left(42)
+
+  it should "not run flatMap in case of failure" in new Fixture:
+    val program = Sio
+      .fail("Noooooooo")
+      .map { _ =>
+        sendMessage("Map")
+        42
+      }
+      .zip(Sio.succeed(42))
+
+    program.runUnsafeSync shouldBe Left("Noooooooo")
+
+    messages.size() shouldBe 0
