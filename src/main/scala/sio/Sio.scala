@@ -49,6 +49,22 @@ private class FiberImpl[E, A](
 
   startExecutionContext.execute(run _)
 
+  private def await(callback: Sio[E, A] => Any): Unit =
+    var notOk = true
+
+    while (notOk) do
+      val state = currentState.get()
+
+      state match
+        case Running(callbacks) =>
+          val newState = Running(callback :: callbacks)
+          notOk = !currentState.compareAndSet(state, newState)
+        case Done(value) =>
+          notOk = false
+          value match
+            case Left(left)   => callback(Sio.fail(left))
+            case Right(right) => callback(Sio.succeedNow(right))
+
   private def complete(value: Either[E, A]) = {
     var notOk = true
     while (notOk) do
@@ -82,22 +98,6 @@ private class FiberImpl[E, A](
     else
       val cont = stack.pop()
       currentSio = cont.handle(value)
-
-  private def await(callback: Sio[E, A] => Any): Unit =
-    var notOk = true
-
-    while (notOk) do
-      val state = currentState.get()
-
-      state match
-        case Running(callbacks) =>
-          val newState = Running(callback :: callbacks)
-          notOk = !currentState.compareAndSet(state, newState)
-        case Done(value) =>
-          notOk = false
-          value match
-            case Left(left)   => callback(Sio.fail(left))
-            case Right(right) => callback(Sio.succeedNow(right))
 
   private def run(): Unit =
     while (loop) do
