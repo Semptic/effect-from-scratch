@@ -22,21 +22,28 @@ private class FiberImpl[E, A](
   private def erase[E, A](sio: Sio[E, A]): Erased = sio.asInstanceOf[Erased]
 
   private sealed trait State
-  private final case class Done(result: Either[E, A])              extends State
+
+  private final case class Done(result: Either[E, A]) extends State
+
   private final case class Running(waiter: List[Sio[E, A] => Any]) extends State
 
   private sealed abstract class Continuation:
     def handle(value: Either[Any, Any]): Erased
 
   private final case class ErrorContinuation(cont: Cont) extends Continuation:
-    override def handle(value: Either[Any, Any]): Erased = cont(value.left.get)
+    override def handle(value: Either[Any, Any]): Erased = value match
+      case Right(right) => throw Exception("Illegal state: Success in error case")
+      case Left(left)   => cont(left)
+
   private final case class SucceessContinuation(cont: Cont) extends Continuation:
-    override def handle(value: Either[Any, Any]): Erased = cont(value.right.get)
+    override def handle(value: Either[Any, Any]): Erased = value match
+      case Right(right) => cont(right)
+      case Left(left)   => throw Exception("Illegal state: Error in success case")
+
   private final case class ErrorAndSucceessContinuation(failure: Cont, success: Cont) extends Continuation:
-    override def handle(value: Either[Any, Any]): Erased =
-      value match
-        case Left(left)   => failure(left)
-        case Right(right) => success(right)
+    override def handle(value: Either[Any, Any]): Erased = value match
+      case Left(left)   => failure(left)
+      case Right(right) => success(right)
 
   private val currentState = AtomicReference[State](Running(List.empty))
 
