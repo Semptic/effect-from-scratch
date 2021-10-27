@@ -6,9 +6,8 @@ import org.scalatest.matchers.should.*
 
 import java.util
 import java.util.concurrent.Executors
-import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class SioSpec extends AnyFlatSpec with Matchers:
 

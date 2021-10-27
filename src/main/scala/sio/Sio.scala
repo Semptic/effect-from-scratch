@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
 import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
-import scala.util.Random
 
 trait Fiber[+E, +A]:
   def join: Sio[E, A]
