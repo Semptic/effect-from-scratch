@@ -79,7 +79,7 @@ private class FiberImpl[E, A](
 
             callbacks.foreach(cb => cb(result))
         case Done(_) =>
-          throw new Exception("Illegal state: Fiber completed multiple times")
+          throw Exception("Illegal state: Fiber completed multiple times")
   }
 
   private def continueOrComplete(value: Either[Any, Any]) =
@@ -119,7 +119,7 @@ private class FiberImpl[E, A](
             run()
           }
         case Sio.Fork(sio) =>
-          val fiber = new FiberImpl(sio, currentEc)
+          val fiber = FiberImpl(sio, currentEc)
           currentSio = erase(Sio.succeedNow(fiber))
         case Sio.Shift(ec) =>
           currentEc = ec
@@ -159,7 +159,7 @@ sealed trait Sio[+E, +A]:
   final def fork: Sio[Nothing, Fiber[E, A]] = Sio.Fork(this)
 
   final def runUnsafeSync: Either[E, A] =
-    val latch  = new CountDownLatch(1)
+    val latch  = CountDownLatch(1)
     var result = null.asInstanceOf[Either[E, A]]
 
     val program = this.foldBoth(a =>
@@ -173,7 +173,7 @@ sealed trait Sio[+E, +A]:
     latch.await()
     result
 
-  final def runUnsafe: Fiber[E, A] = new FiberImpl(this)
+  final def runUnsafe: Fiber[E, A] = FiberImpl(this)
 
 object Sio:
   private[sio] def defaultExecutionContext = ExecutionContext.global
