@@ -8,4 +8,4 @@ def program =
   Sio.succeed("Hello world!").flatMap(printEffect).zipRight(Sio.succeed(msg)).flatMap(printEffect)
 
 @main def hello: Unit =
-  program.runUnsafeSync.fold(println, println)
+  println(program.runUnsafeSync) // Todo: Create api for Result to map/fold over it

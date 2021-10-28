@@ -20,13 +20,13 @@ class SioSpec extends AnyFlatSpec with Matchers:
   it should "run and return an value" in new Fixture:
     val sio = Sio.succeedNow(42)
 
-    sio.runUnsafeSync shouldBe Right(42)
+    sio.runUnsafeSync shouldBe Result.Success(42)
 
   it should "run side effects only if run" in new Fixture:
     val sio = Sio.succeed(sendMessage("Hello, world!"))
 
-    sio.runUnsafeSync shouldBe Right(())
-    sio.runUnsafeSync shouldBe Right(())
+    sio.runUnsafeSync shouldBe Result.Success(())
+    sio.runUnsafeSync shouldBe Result.Success(())
 
     messages.size() shouldBe 2
     messages.poll() shouldBe "Hello, world!"
@@ -41,8 +41,8 @@ class SioSpec extends AnyFlatSpec with Matchers:
       }
     }
 
-    sio.runUnsafeSync shouldBe Right(42)
-    sio.runUnsafeSync shouldBe Right(42)
+    sio.runUnsafeSync shouldBe Result.Success(42)
+    sio.runUnsafeSync shouldBe Result.Success(42)
 
     messages.size() shouldBe 2
     messages.poll() shouldBe "Hello, world!"
@@ -62,14 +62,14 @@ class SioSpec extends AnyFlatSpec with Matchers:
       )
       .flatMap(a => Sio.succeedNow(a - 7))
 
-    mapped.runUnsafeSync shouldBe Right(42)
+    mapped.runUnsafeSync shouldBe Result.Success(42)
 
   it should "map" in new Fixture:
     val sio = Sio.succeed(7)
 
     val mapped = sio.map(a => a * 7).map(a => a - 7)
 
-    mapped.runUnsafeSync shouldBe Right(42)
+    mapped.runUnsafeSync shouldBe Result.Success(42)
 
   it should "zip" in new Fixture:
     val sio1 = Sio.succeed(8)
@@ -77,7 +77,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val zipped = sio1 zip sio2
 
-    zipped.runUnsafeSync shouldBe Right((8, 9))
+    zipped.runUnsafeSync shouldBe Result.Success((8, 9))
 
   it should "zipWith" in new Fixture:
     val sio1 = Sio.succeed(7)
@@ -85,22 +85,22 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val zipped = sio1.zipWith(sio2)((a, b) => a * b)
 
-    zipped.runUnsafeSync shouldBe Right(42)
+    zipped.runUnsafeSync shouldBe Result.Success(42)
 
-  it should "zipRight" in new Fixture:
+  it should "zipResult.Success" in new Fixture:
     val sio1 = Sio.succeed(0)
     val sio2 = Sio.succeed(42)
 
-    val zipped = sio1.zipRight(sio2)
+    val zipped = sio1 *> sio2
 
-    zipped.runUnsafeSync shouldBe Right(42)
+    zipped.runUnsafeSync shouldBe Result.Success(42)
 
   it should "repeat" in new Fixture:
     val sio = Sio.succeed(sendMessage("Hello, world!"))
 
     val repeated = sio.repeat(10)
 
-    repeated.runUnsafeSync shouldBe Right(())
+    repeated.runUnsafeSync shouldBe Result.Success(())
 
     messages.size() shouldBe 11
     (0 until 11).foreach { _ =>
@@ -112,7 +112,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val repeated = sio.repeat(0)
 
-    repeated.runUnsafeSync shouldBe Right(())
+    repeated.runUnsafeSync shouldBe Result.Success(())
 
     messages.size() shouldBe 1
     messages.poll() shouldBe "Hello, world!"
@@ -124,7 +124,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val repeated = sio.repeat(n - 1)
 
-    repeated.runUnsafeSync shouldBe Right(())
+    repeated.runUnsafeSync shouldBe Result.Success(())
 
     runs shouldBe n
 
@@ -135,7 +135,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
       result <- Sio.succeed(a * b)
     } yield result
 
-    sio.runUnsafeSync shouldBe Right(42)
+    sio.runUnsafeSync shouldBe Result.Success(42)
 
   it should "run on multiple threads" in new Fixture:
     val sio = for {
@@ -165,7 +165,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val result = sio.runUnsafeSync
 
-    result shouldBe Right(42)
+    result shouldBe Result.Success(42)
 
     messages.size() shouldBe 3
     messages.poll() shouldBe "Hi, scala 3!"
@@ -192,7 +192,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
       c      <- fiberC.join
     } yield (a, b, c)
 
-    val Right((threadIdA, threadIdB, threadIdC)) = program.runUnsafeSync
+    val Result.Success((threadIdA, threadIdB, threadIdC)) = program.runUnsafeSync
 
     threadIdA should not be threadIdB
     threadIdA should not be threadIdC
@@ -200,11 +200,11 @@ class SioSpec extends AnyFlatSpec with Matchers:
     threadIdB shouldBe threadIdB
 
   it should "fold" in new Fixture:
-    Sio.fail("Noooooooo").fold(_ => Sio.succeed(42), _ => Sio.succeed(0)).runUnsafeSync shouldBe Right(42)
-    Sio.succeed("Yeeeesss").fold(_ => Sio.succeed(0), _ => Sio.succeed(42)).runUnsafeSync shouldBe Right(42)
+    Sio.fail("Noooooooo").fold(_ => Sio.succeed(42), _ => Sio.succeed(0)).runUnsafeSync shouldBe Result.Success(42)
+    Sio.succeed("Yeeeesss").fold(_ => Sio.succeed(0), _ => Sio.succeed(42)).runUnsafeSync shouldBe Result.Success(42)
 
-    Sio.fail("Noooooooo").fold(_ => Sio.fail(42), _ => Sio.succeed(0)).runUnsafeSync shouldBe Left(42)
-    Sio.succeed("Yeeeesss").fold(_ => Sio.succeed(0), _ => Sio.fail(42)).runUnsafeSync shouldBe Left(42)
+    Sio.fail("Noooooooo").fold(_ => Sio.fail(42), _ => Sio.succeed(0)).runUnsafeSync shouldBe Result.Error(42)
+    Sio.succeed("Yeeeesss").fold(_ => Sio.succeed(0), _ => Sio.fail(42)).runUnsafeSync shouldBe Result.Error(42)
 
   it should "not run flatMap in case of failure" in new Fixture:
     val program = Sio
@@ -215,7 +215,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
       }
       .zip(Sio.succeed(42))
 
-    program.runUnsafeSync shouldBe Left("Noooooooo")
+    program.runUnsafeSync shouldBe Result.Error("Noooooooo")
 
     messages.size() shouldBe 0
 
@@ -227,12 +227,19 @@ class SioSpec extends AnyFlatSpec with Matchers:
         0
       }
       .catchAll { e =>
-        sendMessage(e)
+        sendMessage(s"$e")
         Sio.succeed(())
       }
       .zipRight(Sio.succeed(42))
 
-    program.runUnsafeSync shouldBe Right(42)
+    program.runUnsafeSync shouldBe Result.Success(42)
 
     messages.size() shouldBe 1
-    messages.poll() shouldBe "Noooooooo"
+    messages.poll() shouldBe "Error(Noooooooo)"
+
+  it should "handle exceptions" in new Fixture:
+    val program = Sio.succeed(throw Throwable("Noooooo"))
+
+    val result = program.runUnsafeSync
+    result shouldBe a[Result.Exception]
+    result.asInstanceOf[Result.Exception].throwable.getMessage shouldBe "Noooooo"
