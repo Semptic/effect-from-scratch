@@ -228,7 +228,7 @@ object Sio:
 
   def die(throwable: => Throwable): Sio[Nothing, Nothing] = Fail(() => ErrorCause.Exception(throwable))
 
-  def succeedNow[A](value: A): Sio[Nothing, A] = SucceedNow(value)
+  private[sio] def succeedNow[A](value: A): Sio[Nothing, A] = SucceedNow(value)
 
   def succeed[A](thunk: => A): Sio[Nothing, A] = Succeed(() => thunk)
 

@@ -1,8 +1,9 @@
-package sio
+package not.sio
 
 import org.scalatest.*
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.*
+import sio.{Result, Sio}
 
 import java.util
 import java.util.concurrent.Executors
@@ -16,11 +17,6 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     def sendMessage(msg: String): Unit =
       messages.add(msg)
-
-  it should "run and return an value" in new Fixture:
-    val sio = Sio.succeedNow(42)
-
-    sio.runUnsafeSync shouldBe Result.Success(42)
 
   it should "run side effects only if run" in new Fixture:
     val sio = Sio.succeed(sendMessage("Hello, world!"))
@@ -37,7 +33,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
       Future {
         sendMessage("Hello, world!")
         Thread.sleep(1000)
-        complete(Sio.succeedNow(42))
+        complete(Sio.succeed(42))
       }
     }
 
@@ -56,11 +52,11 @@ class SioSpec extends AnyFlatSpec with Matchers:
         Sio.async[Nothing, Int] { complete =>
           Future {
             val result = a * 7
-            complete(Sio.succeedNow(result))
+            complete(Sio.succeed(result))
           }
         }
       )
-      .flatMap(a => Sio.succeedNow(a - 7))
+      .flatMap(a => Sio.succeed(a - 7))
 
     mapped.runUnsafeSync shouldBe Result.Success(42)
 
@@ -144,7 +140,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
                     Future {
                       Thread.sleep(2000)
                       sendMessage("Hello, world!")
-                      complete(Sio.succeedNow(7))
+                      complete(Sio.succeed(7))
                     }
                   }
                   .fork
@@ -153,7 +149,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
                     Future {
                       Thread.sleep(1000)
                       sendMessage("Hello, sio!")
-                      complete(Sio.succeedNow(7))
+                      complete(Sio.succeed(7))
                     }
                   }
                   .fork
@@ -176,7 +172,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     val async = Sio.async[Nothing, Long] { complete =>
       Thread.sleep(1000)
       sendMessage("Hello, sio!")
-      complete(Sio.succeedNow(Thread.currentThread().getId))
+      complete(Sio.succeed(Thread.currentThread().getId))
     }
 
     val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
