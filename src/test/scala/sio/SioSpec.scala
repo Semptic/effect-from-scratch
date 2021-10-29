@@ -222,7 +222,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
         sendMessage("Map")
         0
       }
-      .catchAll { e =>
+      .catchError { e =>
         sendMessage(s"$e")
         Sio.succeed(())
       }
@@ -231,7 +231,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     program.runUnsafeSync shouldBe Result.Success(42)
 
     messages.size() shouldBe 1
-    messages.poll() shouldBe "Error(Noooooooo)"
+    messages.poll() shouldBe "Noooooooo"
 
   it should "handle exceptions" in new Fixture:
     val program = Sio.succeed(throw Throwable("Noooooo"))
@@ -239,3 +239,16 @@ class SioSpec extends AnyFlatSpec with Matchers:
     val result = program.runUnsafeSync
     result shouldBe a[Result.Exception]
     result.asInstanceOf[Result.Exception].throwable.getMessage shouldBe "Noooooo"
+
+  it should "recover from exceptions" in new Fixture:
+    val program = Sio
+      .succeed(5 / 0)
+      .catchException { t =>
+        sendMessage(t.getMessage)
+        Sio.succeed(0)
+      }
+
+    program.runUnsafeSync shouldBe Result.Success(0)
+
+    messages.size() shouldBe 1
+    messages.poll() shouldBe "/ by zero"

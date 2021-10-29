@@ -154,8 +154,8 @@ private class FiberImpl[E, A](
 
             stack.push(
               ErrorAndSucceessContinuation(
-                ((e: Any) => failure.asInstanceOf[Cont](Sio.ErrorCause.Error(e))).asInstanceOf[Cont],
-                ((t: Throwable) => failure.asInstanceOf[Cont](Sio.ErrorCause.Exception(t))).asInstanceOf[Cont],
+                (error) => failure.asInstanceOf[Cont](Sio.ErrorCause.Error(error)),
+                (exception) => failure.asInstanceOf[Cont](Sio.ErrorCause.Exception(exception.asInstanceOf[Throwable])),
                 success.asInstanceOf[Cont]
               )
             )
@@ -164,19 +164,28 @@ private class FiberImpl[E, A](
           currentSio = Sio.die(throwable)
 
 sealed trait Sio[+E, +A]:
-  final def catchAll[E2, B >: A](failure: Sio.ErrorCause[E] => Sio[E2, B]): Sio[E2, B] =
+  final def catchError[E2, B >: A](failure: E => Sio[E2, B]): Sio[E2, B] =
     this.fold(failure, a => Sio.succeedNow(a))
 
-  final def fold[E2, B](failure: Sio.ErrorCause[E] => Sio[E2, B], success: A => Sio[E2, B]): Sio[E2, B] =
-    Sio.Fold(this, failure, success)
+  final def catchException[E2 >: E, B >: A](exception: Throwable => Sio[E2, B]): Sio[E2, B] =
+    Sio.Fold[E, E2, A, B](
+      this,
+      {
+        case Sio.ErrorCause.Error(e)     => Sio.fail(e)
+        case Sio.ErrorCause.Exception(t) => exception(t)
+      },
+      s => Sio.succeedNow(s)
+    )
 
-  final def foldBoth[E1 >: E, B](f: Result[E, A] => Sio[E1, B]): Sio[E1, B] = fold(
-    {
-      case Sio.ErrorCause.Error(error)         => f(Result.Error(error))
-      case Sio.ErrorCause.Exception(throwable) => f(Result.Exception(throwable))
-    },
-    a => f(Result.Success(a))
-  )
+  final def fold[E2, B](failure: E => Sio[E2, B], success: A => Sio[E2, B]): Sio[E2, B] =
+    Sio.Fold(
+      this,
+      {
+        case Sio.ErrorCause.Error(e)     => failure(e)
+        case Sio.ErrorCause.Exception(t) => Sio.die(t)
+      },
+      success
+    )
 
   final def flatMap[E1 >: E, B](cont: A => Sio[E1, B]): Sio[E1, B] = Sio.FlatMap(this, cont)
 
@@ -202,7 +211,14 @@ sealed trait Sio[+E, +A]:
   final def fork: Sio[Nothing, Fiber[E, A]] = Sio.Fork(this)
 
   private def done[E1 >: E, B](f: Result[E, A] => Sio[E1, B]): Sio[E1, B] =
-    this.foldBoth(f)
+    Sio.Fold(
+      this,
+      {
+        case Sio.ErrorCause.Error(e)     => f(Result.Error(e))
+        case Sio.ErrorCause.Exception(t) => f(Result.Exception(t))
+      },
+      s => f(Result.Success(s))
+    )
 
   final def runUnsafeSync: Result[E, A] =
     val latch  = CountDownLatch(1)
