@@ -241,8 +241,8 @@ class SioSpec extends AnyFlatSpec with Matchers:
       .succeed(throw Throwable("Noooooo"))
       .runUnsafeSync
 
-    result shouldBe a[Result.Exception]
-    result.asInstanceOf[Result.Exception].throwable.getMessage shouldBe "Noooooo"
+    result shouldBe a[Result.Exception[_, _]]
+    result.asInstanceOf[Result.Exception[_, _]].throwable.getMessage shouldBe "Noooooo"
 
   it should "recover from exceptions" in new Fixture:
     Sio
@@ -314,9 +314,9 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val result = program.runUnsafeSync
 
-    result shouldBe a[Result.Success[Any]]
-    result.asInstanceOf[Result.Success[Any]].value shouldBe a[Exception]
-    result.asInstanceOf[Result.Success[Any]].value.asInstanceOf[Exception].getMessage shouldBe "Interrupted"
+    result shouldBe a[Result.Success[_, Any]]
+    result.asInstanceOf[Result.Success[_, Any]].value shouldBe a[Exception]
+    result.asInstanceOf[Result.Success[_, Any]].value.asInstanceOf[Exception].getMessage shouldBe "Interrupted"
 
     val reversedMessages = messages.toArray.nn.reverse
 

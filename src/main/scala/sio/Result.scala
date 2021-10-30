@@ -1,30 +1,18 @@
 package sio
 
-sealed trait Result[+E, +A]:
-  def isSuccess: Boolean
+enum Result[+E, +A]:
+  case Success(value: A)
+  case Error(error: E)
+  case Exception(throwable: Throwable)
 
-  def isError: Boolean
+  def isSuccess: Boolean = this match
+    case _: Success[_, _] => true
+    case _                => false
 
-  def isException: Boolean
+  def isError: Boolean = this match
+    case _: Error[_, _] => true
+    case _              => false
 
-object Result:
-  final case class Success[A](value: A) extends Result[Nothing, A]:
-    def isSuccess: Boolean = true
-
-    def isError: Boolean = false
-
-    def isException: Boolean = false
-
-  final case class Error[E](error: E) extends Result[E, Nothing]:
-    def isSuccess: Boolean = false
-
-    def isError: Boolean = true
-
-    def isException: Boolean = false
-
-  final case class Exception(throwable: Throwable) extends Result[Nothing, Nothing]:
-    def isSuccess: Boolean = false
-
-    def isError: Boolean = false
-
-    def isException: Boolean = true
+  def isException: Boolean = this match
+    case _: Exception[_, _] => true
+    case _                  => false
