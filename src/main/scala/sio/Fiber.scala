@@ -22,20 +22,25 @@ private class FiberImpl[E, A](
     case Done(result: Result[E, A])
     case Running(waiter: List[Sio[E, A] => Any])
 
-  private sealed abstract class Continuation:
-    def handle(value: Result[Any, Any]): Erased
+  private enum Continuation:
+    case Succeess(cont: Cont)
+    case ErrorAndSucceess(fold: Sio.Fold[Any, Any, Any, Any])
 
-  private final case class SucceessContinuation(cont: Cont) extends Continuation:
-    override def handle(value: Result[Any, Any]): Erased = value match
-      case Result.Success(success) => cont(success)
-      case Result.Error(_)         => throw Exception("Illegal state: Error in success case")
-      case Result.Exception(_)     => throw Exception("Illegal state: Exception in success case")
+    def isSuccessContinuation: Boolean = this match
+      case _: Succeess => true
+      case _           => false
 
-  private final case class ErrorAndSucceessContinuation(fold: Sio.Fold[Any, Any, Any, Any]) extends Continuation:
-    override def handle(value: Result[Any, Any]): Erased = value match
-      case Result.Success(s)   => fold.success(s)
-      case Result.Error(e)     => fold.failure(Sio.ErrorCause.Error(e))
-      case Result.Exception(t) => fold.failure(Sio.ErrorCause.Exception(t))
+    def handle(value: Result[Any, Any]): Erased = this match
+      case Succeess(cont) =>
+        value match
+          case Result.Success(success) => cont(success)
+          case Result.Error(_)         => throw Exception("Illegal state: Error in success case")
+          case Result.Exception(_)     => throw Exception("Illegal state: Exception in success case")
+      case ErrorAndSucceess(fold) =>
+        value match
+          case Result.Success(s)   => fold.success(s)
+          case Result.Error(e)     => fold.failure(Sio.ErrorCause.Error(e))
+          case Result.Exception(t) => fold.failure(Sio.ErrorCause.Exception(t))
 
   private val currentState = AtomicReference[State](State.Running(List.empty))
 
@@ -116,14 +121,14 @@ private class FiberImpl[E, A](
           case Sio.Succeed(thunk) =>
             continueOrComplete(Result.Success(thunk()))
           case Sio.Fail(error) =>
-            stack.dropWhileInPlace(_.isInstanceOf[SucceessContinuation])
+            stack.dropWhileInPlace(_.isSuccessContinuation)
 
             error() match
               case Sio.ErrorCause.Error(e)     => continueOrComplete(Result.Error(e))
               case Sio.ErrorCause.Exception(t) => continueOrComplete(Result.Exception(t))
           case Sio.FlatMap(sio, cont) =>
             currentSio = erase(sio)
-            stack.push(SucceessContinuation(cont.asInstanceOf[Cont]))
+            stack.push(Continuation.Succeess(cont.asInstanceOf[Cont]))
           case Sio.Async(f) =>
             loop = false
             f { sio =>
@@ -141,7 +146,7 @@ private class FiberImpl[E, A](
             currentSio = erase(sio)
 
             stack.push(
-              ErrorAndSucceessContinuation(
+              Continuation.ErrorAndSucceess(
                 fold.asInstanceOf[Sio.Fold[Any, Any, Any, Any]]
               )
             )
