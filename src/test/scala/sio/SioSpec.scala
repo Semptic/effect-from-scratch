@@ -281,3 +281,45 @@ class SioSpec extends AnyFlatSpec with Matchers:
     messages.poll() shouldBe "exception 1"
     messages.poll() shouldBe "exception handler 1"
     messages.poll() shouldBe "exception handler 2"
+
+  it should "interrupt fiber" in new Fixture:
+    val program = for {
+      fiber1 <- Sio
+                  .async[Nothing, Int] { complete =>
+                    while (true) do
+                      sendMessage("Running")
+                      Thread.sleep(10)
+                    complete(Sio.succeed(5))
+                  }
+                  .fork
+      fiber2 <- Sio
+                  .async[Nothing, Unit] { complete =>
+                    Thread.sleep(500)
+                    val interrupt = fiber1.interupt
+                    sendMessage("Interrupting")
+                    complete(interrupt)
+                  }
+                  .fork
+      a <- fiber1.join.catchException(e => Sio.succeed(e))
+      b <- fiber2.join
+      fiber3 <- Sio
+                  .async[Nothing, Unit] { complete =>
+                    Thread.sleep(500)
+                    sendMessage("Done")
+                    complete(Sio.succeed(()))
+                  }
+                  .fork
+      _ <- fiber3.join
+    } yield a
+
+    val result = program.runUnsafeSync
+
+    result shouldBe a[Result.Success[Any]]
+    result.asInstanceOf[Result.Success[Any]].value shouldBe a[Exception]
+    result.asInstanceOf[Result.Success[Any]].value.asInstanceOf[Exception].getMessage shouldBe "Interrupted"
+
+    val reversedMessages = messages.toArray.reverse
+
+    // After interrupting there should no Running message
+    reversedMessages(0) shouldBe "Done"
+    reversedMessages(1) shouldBe "Interrupting"

@@ -11,6 +11,8 @@ import scala.concurrent.ExecutionContext
 trait Fiber[+E, +A]:
   def join: Sio[E, A]
 
+  def interupt: Sio[Nothing, Unit]
+
 private class FiberImpl[E, A](
   startSio: Sio[E, A],
   startExecutionContext: ExecutionContext = Sio.defaultExecutionContext
@@ -56,14 +58,25 @@ private class FiberImpl[E, A](
 
   private val currentState = AtomicReference[State](Running(List.empty))
 
-  private val stack      = Stack.empty[Continuation]
-  private var currentSio = erase(startSio)
-  private var currentEc  = startExecutionContext
-  private var loop       = true
+  private val stack       = Stack.empty[Continuation]
+  private var currentSio  = erase(startSio)
+  private var currentEc   = startExecutionContext
+  private var loop        = true
+  private var fiberThread = null.asInstanceOf[Thread]
 
   override def join: Sio[E, A] = Sio.async(await)
 
-  startExecutionContext.execute(run _)
+  override def interupt: Sio[Nothing, Unit] =
+    Sio.succeed {
+      loop = false
+      fiberThread.interrupt() // This is not thread-safe, this must be improved
+      complete(Result.Exception(Exception("Interrupted")))
+    }
+
+  startExecutionContext.execute { () =>
+    fiberThread = Thread.currentThread()
+    run()
+  }
 
   private def await(callback: Sio[E, A] => Any): Unit =
     var notOk = true
@@ -168,7 +181,7 @@ sealed trait Sio[+E, +A]:
     this.fold(failure, a => Sio.succeedNow(a))
 
   final def catchException[E2 >: E, B >: A](exception: Throwable => Sio[E2, B]): Sio[E2, B] =
-    Sio.Fold[E, E2, A, B](
+    Sio.Fold(
       this,
       {
         case Sio.ErrorCause.Error(e)     => Sio.fail(e)
