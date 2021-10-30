@@ -255,3 +255,29 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     messages.size() shouldBe 1
     messages.poll() shouldBe "/ by zero"
+
+  it should "handle multiple errors in a row correctly" in new Fixture:
+    Sio.succeed {
+      sendMessage("success 1"); Sio.succeed("success 1")
+    }.flatMap { _ =>
+      sendMessage("error 1"); Sio.fail("error 1")
+    }.catchError { _ =>
+      sendMessage("error handler 1"); Sio.fail("error 2")
+    }.catchError { _ =>
+      sendMessage("error handler 2"); Sio.succeed("success 2")
+    }.flatMap { _ =>
+      sendMessage("exception 1"); throw Exception("exception 1")
+    }.catchException { _ =>
+      sendMessage("exception handler 1"); throw Exception("exception 2")
+    }.catchException { _ =>
+      sendMessage("exception handler 2"); Sio.succeed("success 3")
+    }.runUnsafeSync shouldBe Result.Success("success 3")
+
+    messages.size() shouldBe 7
+    messages.poll() shouldBe "success 1"
+    messages.poll() shouldBe "error 1"
+    messages.poll() shouldBe "error handler 1"
+    messages.poll() shouldBe "error handler 2"
+    messages.poll() shouldBe "exception 1"
+    messages.poll() shouldBe "exception handler 1"
+    messages.poll() shouldBe "exception handler 2"
