@@ -41,17 +41,17 @@ private class FiberImpl[E, A](
 
   private val currentState = AtomicReference[State](Running(List.empty))
 
-  private val stack       = Stack.empty[Continuation]
-  private var currentSio  = erase(startSio)
-  private var currentEc   = startExecutionContext
-  private var loop        = true
-  private var fiberThread = null.asInstanceOf[Thread]
+  private val stack                      = Stack.empty[Continuation]
+  private var currentSio                 = erase(startSio)
+  private var currentEc                  = startExecutionContext
+  private var loop                       = true
+  private var fiberThread: Thread | Null = null
 
   override def join: Sio[E, A] = Sio.async(await)
 
   override def interupt: Sio[Nothing, Unit] =
     loop = false
-    fiberThread.interrupt() // This is not thread-safe, this must be improved
+    fiberThread.nn.interrupt() // This is not thread-safe, this must be improved
     complete(Result.Exception(Exception("Interrupted")))
 
     Sio.succeedNow(())
@@ -77,6 +77,7 @@ private class FiberImpl[E, A](
             case Result.Success(s)   => callback(Sio.succeedNow(s))
             case Result.Error(e)     => callback(Sio.fail(e))
             case Result.Exception(t) => callback(Sio.die(t))
+        case _ => throw Exception("Illigal state: currentState.get returned null")
 
   private def complete(value: Result[E, A]) = {
     var notOk = true
@@ -94,6 +95,7 @@ private class FiberImpl[E, A](
             callbacks.foreach(cb => cb(result))
         case Done(_) =>
           throw Exception("Illegal state: Fiber completed multiple times")
+        case _ => throw Exception("Illigal state: currentState.get returned null")
   }
 
   private def continueOrComplete(value: Result[Any, Any]) =

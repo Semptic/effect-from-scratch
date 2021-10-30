@@ -72,8 +72,8 @@ sealed trait Sio[+E, +A]:
     )
 
   final def runUnsafeSync: Result[E, A] =
-    val latch  = CountDownLatch(1)
-    var result = null.asInstanceOf[Result[E, A]]
+    val latch                       = CountDownLatch(1)
+    var result: Result[E, A] | Null = null
 
     val program = this.done(r =>
       Sio.succeed {
@@ -84,7 +84,7 @@ sealed trait Sio[+E, +A]:
 
     program.runUnsafe
     latch.await()
-    result
+    result.nn
 
   final def runUnsafe: Fiber[E, A] = FiberImpl(this)
 

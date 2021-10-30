@@ -160,13 +160,13 @@ class SioSpec extends AnyFlatSpec with Matchers:
     val async = Sio.async[Nothing, Long] { complete =>
       Thread.sleep(1000)
       sendMessage("Hello, sio!")
-      complete(Sio.succeed(Thread.currentThread().getId))
+      complete(Sio.succeed(Thread.currentThread().nn.getId))
     }
 
-    val ec                    = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
+    val ec                    = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1).nn)
     var threadId: Long | Null = null
 
-    ec.execute(() => threadId = Thread.currentThread().getId)
+    ec.execute(() => threadId = Thread.currentThread().nn.getId)
 
     while (threadId == null) {
       Thread.sleep(100)
@@ -248,7 +248,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     Sio
       .succeed(5 / 0)
       .catchException { t =>
-        sendMessage(t.getMessage)
+        sendMessage(t.getMessage.nn)
         Sio.succeed(0)
       }
       .runUnsafeSync shouldBe Result.Success(0)
@@ -318,7 +318,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     result.asInstanceOf[Result.Success[Any]].value shouldBe a[Exception]
     result.asInstanceOf[Result.Success[Any]].value.asInstanceOf[Exception].getMessage shouldBe "Interrupted"
 
-    val reversedMessages = messages.toArray.reverse
+    val reversedMessages = messages.toArray.nn.reverse
 
     // After interrupting there should no Running message
     reversedMessages(0) shouldBe "Done"
