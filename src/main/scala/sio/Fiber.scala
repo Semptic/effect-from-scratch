@@ -18,11 +18,9 @@ private class FiberImpl[E, A](
 
   private def erase[E, A](sio: Sio[E, A]): Erased = sio.asInstanceOf[Erased]
 
-  private sealed trait State
-
-  private final case class Done(result: Result[E, A]) extends State
-
-  private final case class Running(waiter: List[Sio[E, A] => Any]) extends State
+  private enum State:
+    case Done(result: Result[E, A])
+    case Running(waiter: List[Sio[E, A] => Any])
 
   private sealed abstract class Continuation:
     def handle(value: Result[Any, Any]): Erased
@@ -39,7 +37,7 @@ private class FiberImpl[E, A](
       case Result.Error(e)     => fold.failure(Sio.ErrorCause.Error(e))
       case Result.Exception(t) => fold.failure(Sio.ErrorCause.Exception(t))
 
-  private val currentState = AtomicReference[State](Running(List.empty))
+  private val currentState = AtomicReference[State](State.Running(List.empty))
 
   private val stack                      = Stack.empty[Continuation]
   private var currentSio                 = erase(startSio)
@@ -68,10 +66,10 @@ private class FiberImpl[E, A](
       val state = currentState.get()
 
       state match
-        case Running(callbacks) =>
-          val newState = Running(callback :: callbacks)
+        case State.Running(callbacks) =>
+          val newState = State.Running(callback :: callbacks)
           notOk = !currentState.compareAndSet(state, newState)
-        case Done(value) =>
+        case State.Done(value) =>
           notOk = false
           value match
             case Result.Success(s)   => callback(Sio.succeedNow(s))
@@ -84,8 +82,8 @@ private class FiberImpl[E, A](
     while (notOk) do
       val state = currentState.get()
       state match
-        case Running(callbacks) =>
-          if (currentState.compareAndSet(state, Done(value)))
+        case State.Running(callbacks) =>
+          if (currentState.compareAndSet(state, State.Done(value)))
             notOk = false
             val result = value match
               case Result.Success(s)   => Sio.succeedNow(s)
@@ -93,7 +91,7 @@ private class FiberImpl[E, A](
               case Result.Exception(t) => Sio.die(t)
 
             callbacks.foreach(cb => cb(result))
-        case Done(_) =>
+        case _: State.Done =>
           throw Exception("Illegal state: Fiber completed multiple times")
         case _ => throw Exception("Illigal state: currentState.get returned null")
   }
