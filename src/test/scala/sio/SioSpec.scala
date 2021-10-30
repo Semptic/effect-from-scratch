@@ -83,6 +83,10 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     zipped.runUnsafeSync shouldBe Result.Success(42)
 
+  it should "zipLeft and zipRight" in new Fixture:
+    (Sio.succeed(0) *> Sio.succeed(42)).runUnsafeSync shouldBe Result.Success(42)
+    (Sio.succeed(42) <* Sio.succeed(0)).runUnsafeSync shouldBe Result.Success(42)
+
   it should "zipResult.Success" in new Fixture:
     val sio1 = Sio.succeed(0)
     val sio2 = Sio.succeed(42)
@@ -175,14 +179,19 @@ class SioSpec extends AnyFlatSpec with Matchers:
       complete(Sio.succeed(Thread.currentThread().getId))
     }
 
-    val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
+    val ec                    = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
+    var threadId: Long | Null = null
 
-    val shifted = Sio.shift(ec) *> async
+    ec.execute(() => threadId = Thread.currentThread().getId)
+
+    while (threadId == null) {
+      Thread.sleep(100)
+    }
 
     val program = for {
       fiberA <- async.fork
-      fiberB <- shifted.fork
-      fiberC <- shifted.fork
+      fiberB <- async.fork.shift(ec)
+      fiberC <- async.fork.shift(ec)
       a      <- fiberA.join
       b      <- fiberB.join
       c      <- fiberC.join
@@ -190,10 +199,10 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val Result.Success((threadIdA, threadIdB, threadIdC)) = program.runUnsafeSync
 
-    threadIdA should not be threadIdB
-    threadIdA should not be threadIdC
+    threadIdA should not be threadId
 
-    threadIdB shouldBe threadIdB
+    threadIdB shouldBe threadId
+    threadIdC shouldBe threadId
 
   it should "fold" in new Fixture:
     Sio.fail("Noooooooo").fold(_ => Sio.succeed(42), _ => Sio.succeed(0)).runUnsafeSync shouldBe Result.Success(42)

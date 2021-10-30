@@ -187,6 +187,8 @@ sealed trait Sio[+E, +A]:
       success
     )
 
+  def shift(ec: ExecutionContext): Sio[E, A] = this <* Sio.Shift(ec)
+
   final def flatMap[E1 >: E, B](cont: A => Sio[E1, B]): Sio[E1, B] = Sio.FlatMap(this, cont)
 
   final def map[B](cont: A => B): Sio[E, B] = this.flatMap(a => Sio.succeedNow(cont(a)))
@@ -198,7 +200,11 @@ sealed trait Sio[+E, +A]:
 
   final def zipRight[E1 >: E, B](that: Sio[E1, B]): Sio[E1, B] = this.zipWith(that)((_, b) => b)
 
-  final def *>[E1 >: E, B](that: Sio[E1, B]): Sio[E1, B] = zipRight(that)
+  final def *>[E1 >: E, B](that: Sio[E1, B]): Sio[E1, B] = this.zipRight(that)
+
+  final def zipLeft[E1 >: E, B](that: Sio[E1, B]): Sio[E1, A] = that.zipRight(this)
+
+  final def <*[E1 >: E, B](that: Sio[E1, B]): Sio[E1, A] = this.zipLeft(that)
 
   final def repeat(n: Int): Sio[E, A] =
     @tailrec
@@ -250,7 +256,7 @@ object Sio:
 
   def async[E, A](f: (Sio[E, A] => Any) => Any): Sio[E, A] = Async(f)
 
-  def shift(ec: ExecutionContext): Sio[Nothing, Unit] = Sio.Shift(ec)
+  private[sio] def shift(ec: ExecutionContext): Sio[Nothing, Unit] = Sio.Shift(ec)
 
   private[sio] case class Fail[E](error: () => ErrorCause[E]) extends Sio[E, Nothing]
 
