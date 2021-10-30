@@ -83,17 +83,11 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     zipped.runUnsafeSync shouldBe Result.Success(42)
 
-  it should "zipLeft and zipRight" in new Fixture:
-    (Sio.succeed(0) *> Sio.succeed(42)).runUnsafeSync shouldBe Result.Success(42)
+  it should "zipLeft" in new Fixture:
     (Sio.succeed(42) <* Sio.succeed(0)).runUnsafeSync shouldBe Result.Success(42)
 
-  it should "zipResult.Success" in new Fixture:
-    val sio1 = Sio.succeed(0)
-    val sio2 = Sio.succeed(42)
-
-    val zipped = sio1 *> sio2
-
-    zipped.runUnsafeSync shouldBe Result.Success(42)
+  it should "zipRight" in new Fixture:
+    (Sio.succeed(0) *> Sio.succeed(42)).runUnsafeSync shouldBe Result.Success(42)
 
   it should "repeat" in new Fixture:
     val sio = Sio.succeed(sendMessage("Hello, world!"))
