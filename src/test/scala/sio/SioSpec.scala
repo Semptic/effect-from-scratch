@@ -1,4 +1,4 @@
-package not.sio
+package sio
 
 import org.scalatest.*
 import org.scalatest.flatspec.AnyFlatSpec

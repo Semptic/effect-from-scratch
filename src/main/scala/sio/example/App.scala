@@ -1,4 +1,4 @@
-package not.sio
+package example
 
 import sio.{Result, Sio}
 
