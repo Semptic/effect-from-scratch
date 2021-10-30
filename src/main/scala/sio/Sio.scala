@@ -67,11 +67,11 @@ private class FiberImpl[E, A](
   override def join: Sio[E, A] = Sio.async(await)
 
   override def interupt: Sio[Nothing, Unit] =
-    Sio.succeed {
-      loop = false
-      fiberThread.interrupt() // This is not thread-safe, this must be improved
-      complete(Result.Exception(Exception("Interrupted")))
-    }
+    loop = false
+    fiberThread.interrupt() // This is not thread-safe, this must be improved
+    complete(Result.Exception(Exception("Interrupted")))
+
+    Sio.succeedNow(())
 
   startExecutionContext.execute { () =>
     fiberThread = Thread.currentThread()
