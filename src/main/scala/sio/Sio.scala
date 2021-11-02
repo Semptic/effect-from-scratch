@@ -18,6 +18,7 @@ sealed trait Sio[+E, +A]:
       {
         case Sio.ErrorCause.Error(e)     => Sio.fail(e)
         case Sio.ErrorCause.Exception(t) => exception(t)
+        case Sio.ErrorCause.Killed()     => Sio.kill()
       },
       s => Sio.succeedNow(s)
     )
@@ -28,6 +29,7 @@ sealed trait Sio[+E, +A]:
       {
         case Sio.ErrorCause.Error(e)     => failure(e)
         case Sio.ErrorCause.Exception(t) => Sio.die(t)
+        case Sio.ErrorCause.Killed()     => Sio.kill()
       },
       success
     )
@@ -67,6 +69,7 @@ sealed trait Sio[+E, +A]:
       {
         case Sio.ErrorCause.Error(e)     => f(Result.Error(e))
         case Sio.ErrorCause.Exception(t) => f(Result.Exception(t))
+        case Sio.ErrorCause.Killed()     => f(Result.Killed())
       },
       s => f(Result.Success(s))
     )
@@ -95,11 +98,13 @@ object Sio:
 
   def die(throwable: => Throwable): Sio[Nothing, Nothing] = Fail(() => ErrorCause.Exception(throwable))
 
-  private[sio] def succeedNow[A](value: A): Sio[Nothing, A] = SucceedNow(value)
-
   def succeed[A](thunk: => A): Sio[Nothing, A] = Succeed(() => thunk)
 
   def async[E, A](f: (Sio[E, A] => Any) => Any): Sio[E, A] = Async(f)
+
+  private[sio] def kill(): Sio[Nothing, Nothing] = Fail(() => ErrorCause.Killed())
+
+  private[sio] def succeedNow[A](value: A): Sio[Nothing, A] = SucceedNow(value)
 
   private[sio] def shift(ec: ExecutionContext): Sio[Nothing, Unit] = Sio.Shift(ec)
 
@@ -123,9 +128,7 @@ object Sio:
 
   private[sio] case class Shift(executionContext: ExecutionContext) extends Sio[Nothing, Unit]
 
-  private[sio] sealed trait ErrorCause[+E]
-
-  private[sio] object ErrorCause:
-    final case class Error[E](error: E) extends ErrorCause[E]
-
-    final case class Exception(throwable: Throwable) extends ErrorCause[Nothing]
+  private[sio] enum ErrorCause[+E]:
+    case Error(error: E) extends ErrorCause[E]
+    case Exception(throwable: Throwable) extends ErrorCause[Nothing]
+    case Killed() extends ErrorCause[Nothing]

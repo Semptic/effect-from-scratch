@@ -7,7 +7,7 @@ import scala.concurrent.ExecutionContext
 trait Fiber[+E, +A]:
   def join: Sio[E, A]
 
-  def interupt: Sio[Nothing, Unit]
+  def kill: Sio[Nothing, Unit]
 
 private class FiberImpl[E, A](
   startSio: Sio[E, A],
@@ -34,13 +34,13 @@ private class FiberImpl[E, A](
       case Succeess(cont) =>
         value match
           case Result.Success(success) => cont(success)
-          case Result.Error(_)         => throw Exception("Illegal state: Error in success case")
-          case Result.Exception(_)     => throw Exception("Illegal state: Exception in success case")
+          case error                   => throw Exception(s"Illegal state: $error in success case")
       case ErrorAndSucceess(fold) =>
         value match
           case Result.Success(s)   => fold.success(s)
           case Result.Error(e)     => fold.failure(Sio.ErrorCause.Error(e))
           case Result.Exception(t) => fold.failure(Sio.ErrorCause.Exception(t))
+          case Result.Killed()     => fold.failure(Sio.ErrorCause.Killed())
 
   private val currentState = AtomicReference[State](State.Running(List.empty))
 
@@ -52,12 +52,12 @@ private class FiberImpl[E, A](
 
   override def join: Sio[E, A] = Sio.async(await)
 
-  override def interupt: Sio[Nothing, Unit] =
-    loop = false
-    fiberThread.nn.interrupt() // This is not thread-safe, this must be improved
-    complete(Result.Exception(Exception("Interrupted")))
-
-    Sio.succeedNow(())
+  override def kill: Sio[Nothing, Unit] =
+    Sio.succeed {
+      loop = false
+      fiberThread.nn.interrupt() // This is not thread-safe, this must be improved
+      complete(Result.Killed())
+    }
 
   startExecutionContext.execute { () =>
     fiberThread = Thread.currentThread()
@@ -80,6 +80,7 @@ private class FiberImpl[E, A](
             case Result.Success(s)   => callback(Sio.succeedNow(s))
             case Result.Error(e)     => callback(Sio.fail(e))
             case Result.Exception(t) => callback(Sio.die(t))
+            case Result.Killed()     => callback(Sio.kill())
         case _ => throw Exception("Illigal state: currentState.get returned null")
 
   private def complete(value: Result[E, A]) = {
@@ -94,6 +95,7 @@ private class FiberImpl[E, A](
               case Result.Success(s)   => Sio.succeedNow(s)
               case Result.Error(e)     => Sio.fail(e)
               case Result.Exception(t) => Sio.die(t)
+              case Result.Killed()     => Sio.kill()
 
             callbacks.foreach(cb => cb(result))
         case _: State.Done =>
@@ -108,6 +110,7 @@ private class FiberImpl[E, A](
         case Result.Success(s)   => complete(Result.Success(s.asInstanceOf[A]))
         case Result.Error(e)     => complete(Result.Error(e.asInstanceOf[E]))
         case Result.Exception(t) => complete(Result.Exception(t))
+        case Result.Killed()     => complete(Result.Killed())
     else
       val cont = stack.pop()
       currentSio = cont.handle(value)
@@ -126,6 +129,7 @@ private class FiberImpl[E, A](
             error() match
               case Sio.ErrorCause.Error(e)     => continueOrComplete(Result.Error(e))
               case Sio.ErrorCause.Exception(t) => continueOrComplete(Result.Exception(t))
+              case Sio.ErrorCause.Killed()     => continueOrComplete(Result.Killed())
           case Sio.FlatMap(sio, cont) =>
             currentSio = erase(sio)
             stack.push(Continuation.Succeess(cont.asInstanceOf[Cont]))

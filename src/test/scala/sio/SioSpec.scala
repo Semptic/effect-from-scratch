@@ -241,8 +241,8 @@ class SioSpec extends AnyFlatSpec with Matchers:
       .succeed(throw Throwable("Noooooo"))
       .runUnsafeSync
 
-    result shouldBe a[Result.Exception[_, _]]
-    result.asInstanceOf[Result.Exception[_, _]].throwable.getMessage shouldBe "Noooooo"
+    result shouldBe a[Result.Exception]
+    result.asInstanceOf[Result.Exception].throwable.getMessage shouldBe "Noooooo"
 
   it should "recover from exceptions" in new Fixture:
     Sio
@@ -282,7 +282,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     messages.poll() shouldBe "exception handler 1"
     messages.poll() shouldBe "exception handler 2"
 
-  it should "interrupt fiber" in new Fixture:
+  it should "kill fiber" in new Fixture:
     val program = for {
       fiber1 <- Sio
                   .async[Nothing, Int] { complete =>
@@ -295,31 +295,20 @@ class SioSpec extends AnyFlatSpec with Matchers:
       fiber2 <- Sio
                   .async[Nothing, Unit] { complete =>
                     Thread.sleep(500)
-                    val interrupt = fiber1.interupt
-                    sendMessage("Interrupting")
+                    val interrupt = fiber1.kill
+                    sendMessage("Killing")
                     complete(interrupt)
                   }
                   .fork
-      a <- fiber1.join.catchException(e => Sio.succeed(e))
+      a <- fiber1.join
       b <- fiber2.join
-      fiber3 <- Sio
-                  .async[Nothing, Unit] { complete =>
-                    Thread.sleep(500)
-                    sendMessage("Done")
-                    complete(Sio.succeed(()))
-                  }
-                  .fork
-      _ <- fiber3.join
     } yield a
 
     val result = program.runUnsafeSync
 
-    result shouldBe a[Result.Success[_, Any]]
-    result.asInstanceOf[Result.Success[_, Any]].value shouldBe a[Exception]
-    result.asInstanceOf[Result.Success[_, Any]].value.asInstanceOf[Exception].getMessage shouldBe "Interrupted"
+    result shouldBe Result.Killed()
 
     val reversedMessages = messages.toArray.nn.reverse
 
-    // After interrupting there should no Running message
-    reversedMessages(0) shouldBe "Done"
-    reversedMessages(1) shouldBe "Interrupting"
+    // After killing there should no Running message
+    reversedMessages(0) shouldBe "Killing"
