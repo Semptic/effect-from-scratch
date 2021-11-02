@@ -40,6 +40,8 @@ sealed trait Sio[+E, +A]:
       success
     )
 
+  def undisturbed: Sio[E, A] = Sio.Undisturbed(this)
+
   def shift(ec: ExecutionContext): Sio[E, A] = this <* Sio.Shift(ec)
 
   final def flatMap[E1 >: E, B](cont: A => Sio[E1, B]): Sio[E1, B] = Sio.FlatMap(this, cont)
@@ -138,6 +140,8 @@ object Sio:
   private[sio] case class Fork[E, A](sio: Sio[E, A]) extends Sio[Nothing, Fiber[E, A]]
 
   private[sio] case class Shift(executionContext: ExecutionContext) extends Sio[Nothing, Unit]
+
+  private[sio] case class Undisturbed[E, A](sio: Sio[E, A]) extends Sio[E, A]
 
   private[sio] enum ErrorCause[+E]:
     case Error(error: E) extends ErrorCause[E]

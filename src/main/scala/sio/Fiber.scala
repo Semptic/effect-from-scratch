@@ -45,9 +45,10 @@ private class FiberImpl[E, A](
           case Result.Killed()      => fold.failure(Sio.ErrorCause.Killed())
           case Result.Interrupted() => fold.failure(Sio.ErrorCause.Interrupted())
 
-  private val currentState   = AtomicReference[State](State.Running(List.empty))
-  private val isInterrupted  = AtomicBoolean(false)
-  private var isInterrupting = false
+  private val currentState    = AtomicReference[State](State.Running(List.empty))
+  private val isInterrupted   = AtomicBoolean(false)
+  private var isInterrupting  = false
+  private var isInterruptible = true
 
   private val stack                      = Stack.empty[Continuation]
   private var currentSio                 = erase(startSio)
@@ -128,7 +129,7 @@ private class FiberImpl[E, A](
       currentSio = cont.handle(value)
 
   private def shouldInterrupt =
-    !isInterrupting && isInterrupted.get()
+    isInterruptible && !isInterrupting && isInterrupted.get()
 
   private def run(): Unit =
     while (loop) do
@@ -174,6 +175,11 @@ private class FiberImpl[E, A](
                   fold.asInstanceOf[Sio.Fold[Any, Any, Any, Any]]
                 )
               )
+            case Sio.Undisturbed(sio) =>
+              isInterruptible = false
+              currentSio = sio *> Sio.succeed {
+                isInterruptible = true
+              }
         catch
           case throwable: Throwable =>
             currentSio = Sio.die(throwable)

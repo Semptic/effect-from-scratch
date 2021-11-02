@@ -328,11 +328,10 @@ class SioSpec extends AnyFlatSpec with Matchers:
                 }.fork
       a <- fiber1.join
       _ <- fiber2.join
-      fiber3 <- Sio.succeed {
-                  Thread.sleep(500)
-                  sendMessage("Done")
-                }.fork
-      _ <- fiber3.join
+      _ <- Sio.succeed {
+             Thread.sleep(500)
+             sendMessage("Done")
+           }
     } yield a
 
     val result = program.runUnsafeSync
@@ -344,3 +343,47 @@ class SioSpec extends AnyFlatSpec with Matchers:
     // After interrupting there should no Running message
     reversedMessages(0) shouldBe "Done"
     reversedMessages(1) shouldBe "Interrupting"
+
+  it should "be able to mark something as uninteruptible" in new Fixture:
+    val program = for {
+      fiber1 <- (Sio.succeed {
+                  sendMessage("Running")
+                  Thread.sleep(100)
+                }.repeat(9).undisturbed *> Sio
+                  .succeed(sendMessage("Should not run"))
+                  .forever).catchSome { case Sio.ErrorCause.Interrupted() =>
+                  Sio.succeed(42)
+                }.fork
+      fiber2 <- Sio.async { complete =>
+                  Thread.sleep(500)
+                  sendMessage("Interrupting")
+                  complete(fiber1.interrupt())
+                }.fork
+      a <- fiber1.join
+      _ <- fiber2.join
+      _ <- Sio.succeed {
+             Thread.sleep(500)
+             sendMessage("Done")
+           }
+    } yield a
+
+    val result = program.runUnsafeSync
+
+    result shouldBe Result.Success(42)
+
+    val reversedMessages = messages.toArray.nn.reverse.toList
+
+    reversedMessages.length shouldBe 12
+
+    reversedMessages(0) shouldBe "Done"
+    reversedMessages(1) shouldBe "Running"
+    reversedMessages(2) shouldBe "Running"
+    reversedMessages(3) shouldBe "Running"
+    reversedMessages(4) shouldBe "Running"
+    reversedMessages(5) shouldBe "Running"
+    reversedMessages(6) shouldBe "Interrupting"
+    reversedMessages(7) shouldBe "Running"
+    reversedMessages(8) shouldBe "Running"
+    reversedMessages(9) shouldBe "Running"
+    reversedMessages(10) shouldBe "Running"
+    reversedMessages(11) shouldBe "Running"
