@@ -12,24 +12,30 @@ sealed trait Sio[+E, +A]:
   final def catchError[E2, B >: A](failure: E => Sio[E2, B]): Sio[E2, B] =
     this.fold(failure, a => Sio.succeedNow(a))
 
+  final def catchSome[E2 >: E, B >: A](failure: PartialFunction[Sio.ErrorCause[E], Sio[E2, B]]): Sio[E2, B] = Sio.Fold(
+    this,
+    failure.orElse {
+      case Sio.ErrorCause.Error(e)      => Sio.fail(e)
+      case Sio.ErrorCause.Exception(t)  => Sio.die(t)
+      case Sio.ErrorCause.Killed()      => Sio.kill()
+      case Sio.ErrorCause.Interrupted() => Sio.interrupt()
+    },
+    s => Sio.succeedNow(s)
+  )
+
   final def catchException[E2 >: E, B >: A](exception: Throwable => Sio[E2, B]): Sio[E2, B] =
-    Sio.Fold(
-      this,
-      {
-        case Sio.ErrorCause.Error(e)     => Sio.fail(e)
-        case Sio.ErrorCause.Exception(t) => exception(t)
-        case Sio.ErrorCause.Killed()     => Sio.kill()
-      },
-      s => Sio.succeedNow(s)
-    )
+    this.catchSome { case Sio.ErrorCause.Exception(t) =>
+      exception(t)
+    }
 
   final def fold[E2, B](failure: E => Sio[E2, B], success: A => Sio[E2, B]): Sio[E2, B] =
     Sio.Fold(
       this,
       {
-        case Sio.ErrorCause.Error(e)     => failure(e)
-        case Sio.ErrorCause.Exception(t) => Sio.die(t)
-        case Sio.ErrorCause.Killed()     => Sio.kill()
+        case Sio.ErrorCause.Error(e)      => failure(e)
+        case Sio.ErrorCause.Exception(t)  => Sio.die(t)
+        case Sio.ErrorCause.Killed()      => Sio.kill()
+        case Sio.ErrorCause.Interrupted() => Sio.interrupt()
       },
       success
     )
@@ -42,16 +48,16 @@ sealed trait Sio[+E, +A]:
 
   final def zip[E1 >: E, B](that: Sio[E1, B]): Sio[E1, (A, B)] = this.zipWith(that)((a, b) => (a, b))
 
-  final def zipWith[E1 >: E, B, C](that: Sio[E1, B])(f: (A, B) => C): Sio[E1, C] =
+  final def zipWith[E1 >: E, B, C](that: => Sio[E1, B])(f: (A, B) => C): Sio[E1, C] =
     this.flatMap(a => that.flatMap(b => Sio.succeedNow(f(a, b))))
 
-  final def zipRight[E1 >: E, B](that: Sio[E1, B]): Sio[E1, B] = this.zipWith(that)((_, b) => b)
+  final def zipRight[E1 >: E, B](that: => Sio[E1, B]): Sio[E1, B] = this.zipWith(that)((_, b) => b)
 
-  final def *>[E1 >: E, B](that: Sio[E1, B]): Sio[E1, B] = this.zipRight(that)
+  final def *>[E1 >: E, B](that: => Sio[E1, B]): Sio[E1, B] = this.zipRight(that)
 
-  final def zipLeft[E1 >: E, B](that: Sio[E1, B]): Sio[E1, A] = that.zipRight(this)
+  final def zipLeft[E1 >: E, B](that: => Sio[E1, B]): Sio[E1, A] = that.zipRight(this)
 
-  final def <*[E1 >: E, B](that: Sio[E1, B]): Sio[E1, A] = this.zipLeft(that)
+  final def <*[E1 >: E, B](that: => Sio[E1, B]): Sio[E1, A] = this.zipLeft(that)
 
   final def repeat(n: Int): Sio[E, A] =
     @tailrec
@@ -61,15 +67,18 @@ sealed trait Sio[+E, +A]:
 
     repeat(n, this)
 
+  final def forever: Sio[E, Unit] = this *> this.forever
+
   final def fork: Sio[Nothing, Fiber[E, A]] = Sio.Fork(this)
 
   private def done[E1 >: E, B](f: Result[E, A] => Sio[E1, B]): Sio[E1, B] =
     Sio.Fold(
       this,
       {
-        case Sio.ErrorCause.Error(e)     => f(Result.Error(e))
-        case Sio.ErrorCause.Exception(t) => f(Result.Exception(t))
-        case Sio.ErrorCause.Killed()     => f(Result.Killed())
+        case Sio.ErrorCause.Error(e)      => f(Result.Error(e))
+        case Sio.ErrorCause.Exception(t)  => f(Result.Exception(t))
+        case Sio.ErrorCause.Killed()      => f(Result.Killed())
+        case Sio.ErrorCause.Interrupted() => f(Result.Interrupted())
       },
       s => f(Result.Success(s))
     )
@@ -104,6 +113,8 @@ object Sio:
 
   private[sio] def kill(): Sio[Nothing, Nothing] = Fail(() => ErrorCause.Killed())
 
+  private[sio] def interrupt(): Sio[Nothing, Nothing] = Fail(() => ErrorCause.Interrupted())
+
   private[sio] def succeedNow[A](value: A): Sio[Nothing, A] = SucceedNow(value)
 
   private[sio] def shift(ec: ExecutionContext): Sio[Nothing, Unit] = Sio.Shift(ec)
@@ -132,3 +143,4 @@ object Sio:
     case Error(error: E) extends ErrorCause[E]
     case Exception(throwable: Throwable) extends ErrorCause[Nothing]
     case Killed() extends ErrorCause[Nothing]
+    case Interrupted() extends ErrorCause[Nothing]

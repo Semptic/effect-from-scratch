@@ -295,9 +295,8 @@ class SioSpec extends AnyFlatSpec with Matchers:
       fiber2 <- Sio
                   .async[Nothing, Unit] { complete =>
                     Thread.sleep(500)
-                    val interrupt = fiber1.kill
                     sendMessage("Killing")
-                    complete(interrupt)
+                    complete(fiber1.kill())
                   }
                   .fork
       a <- fiber1.join
@@ -312,3 +311,36 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     // After killing there should no Running message
     reversedMessages(0) shouldBe "Killing"
+
+  it should "interrupt fiber" in new Fixture:
+    val program = for {
+      fiber1 <- Sio.succeed {
+                  sendMessage("Running")
+                  Thread.sleep(100)
+                  0
+                }.forever.catchSome { case Sio.ErrorCause.Interrupted() =>
+                  Sio.succeed(42)
+                }.fork
+      fiber2 <- Sio.async { complete =>
+                  Thread.sleep(500)
+                  sendMessage("Interrupting")
+                  complete(fiber1.interrupt())
+                }.fork
+      a <- fiber1.join
+      _ <- fiber2.join
+      fiber3 <- Sio.succeed {
+                  Thread.sleep(500)
+                  sendMessage("Done")
+                }.fork
+      _ <- fiber3.join
+    } yield a
+
+    val result = program.runUnsafeSync
+
+    result shouldBe Result.Success(42)
+
+    val reversedMessages = messages.toArray.nn.reverse
+
+    // After interrupting there should no Running message
+    reversedMessages(0) shouldBe "Done"
+    reversedMessages(1) shouldBe "Interrupting"
