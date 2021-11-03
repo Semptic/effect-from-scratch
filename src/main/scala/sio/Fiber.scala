@@ -11,7 +11,7 @@ trait Fiber[+E, +A]:
 
   def interrupt(): Sio[Nothing, Unit]
 
-private class FiberImpl[E, A](
+private[sio] final class FiberImpl[E, A](
   startSio: Sio[E, A],
   startExecutionContext: ExecutionContext = Sio.defaultExecutionContext
 ) extends Fiber[E, A]:

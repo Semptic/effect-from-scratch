@@ -117,27 +117,27 @@ object Sio:
 
   private[sio] def shift(ec: ExecutionContext): Sio[Nothing, Unit] = Sio.Shift(ec)
 
-  private[sio] case class Fail[E](error: () => ErrorCause[E]) extends Sio[E, Nothing]
+  private[sio] final case class Fail[E](error: () => ErrorCause[E]) extends Sio[E, Nothing]
 
-  private[sio] case class SucceedNow[A](value: A) extends Sio[Nothing, A]
+  private[sio] final case class SucceedNow[A](value: A) extends Sio[Nothing, A]
 
-  private[sio] case class Succeed[A](thunk: () => A) extends Sio[Nothing, A]
+  private[sio] final case class Succeed[A](thunk: () => A) extends Sio[Nothing, A]
 
-  private[sio] case class Async[E, A](f: (Sio[E, A] => Any) => Any) extends Sio[E, A]
+  private[sio] final case class Async[E, A](f: (Sio[E, A] => Any) => Any) extends Sio[E, A]
 
-  private[sio] case class Fold[E, E2, A, B](
+  private[sio] final case class Fold[E, E2, A, B](
     sio: Sio[E, A],
     failure: ErrorCause[E] => Sio[E2, B],
     success: A => Sio[E2, B]
   ) extends Sio[E2, B]
 
-  private[sio] case class FlatMap[E, A, B](sio: Sio[E, A], cont: A => Sio[E, B]) extends Sio[E, B]
+  private[sio] final case class FlatMap[E, A, B](sio: Sio[E, A], cont: A => Sio[E, B]) extends Sio[E, B]
 
-  private[sio] case class Fork[E, A](sio: Sio[E, A]) extends Sio[Nothing, Fiber[E, A]]
+  private[sio] final case class Fork[E, A](sio: Sio[E, A]) extends Sio[Nothing, Fiber[E, A]]
 
-  private[sio] case class Shift(executionContext: ExecutionContext) extends Sio[Nothing, Unit]
+  private[sio] final case class Shift(executionContext: ExecutionContext) extends Sio[Nothing, Unit]
 
-  private[sio] case class Undisturbed[E, A](sio: Sio[E, A]) extends Sio[E, A]
+  private[sio] final case class Undisturbed[E, A](sio: Sio[E, A]) extends Sio[E, A]
 
   private[sio] enum ErrorCause[+E]:
     case Error(error: E) extends ErrorCause[E]
