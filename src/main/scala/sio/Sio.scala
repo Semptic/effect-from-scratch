@@ -40,9 +40,9 @@ sealed trait Sio[+E, +A]:
       success
     )
 
-  def undisturbed: Sio[E, A] = Sio.Undisturbed(this)
+  final def undisturbed: Sio[E, A] = Sio.Undisturbed(this)
 
-  def shift(ec: ExecutionContext): Sio[E, A] = this <* Sio.Shift(ec)
+  final def shift(ec: ExecutionContext): Sio[E, A] = this <* Sio.Shift(ec)
 
   final def flatMap[E1 >: E, B](cont: A => Sio[E1, B]): Sio[E1, B] = Sio.FlatMap(this, cont)
 
