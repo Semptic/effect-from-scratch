@@ -342,7 +342,9 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     // After interrupting there should no Running message
     reversedMessages(0) shouldBe "Done"
-    reversedMessages(1) shouldBe "Interrupting"
+    reversedMessages(
+      1
+    ) shouldBe "Interrupting" // This test is wonky, due to its parallelism there could be one Running between Done and Interrupting
 
   it should "be able to mark something as uninteruptible" in new Fixture:
     val program = for {
@@ -381,7 +383,9 @@ class SioSpec extends AnyFlatSpec with Matchers:
     reversedMessages(3) shouldBe "Running"
     reversedMessages(4) shouldBe "Running"
     reversedMessages(5) shouldBe "Running"
-    reversedMessages(6) shouldBe "Interrupting"
+    reversedMessages(
+      6
+    ) shouldBe "Interrupting" // This test is wonky, due to its parallelism this message could be the 5th or 6th position
     reversedMessages(7) shouldBe "Running"
     reversedMessages(8) shouldBe "Running"
     reversedMessages(9) shouldBe "Running"
