@@ -30,25 +30,22 @@ def GuessNumber(maxNumber: Int): Sio[Nothing, Int] =
     number <- ReadLine().flatMap(s => Sio.succeed(s.toInt))
   yield number
 
-def CheckNumber(n: Int, maxNumber: Int): Sio[Nothing, Boolean] =
-  def checkNumber(n: Int, guess: Sio[Nothing, Int]): Sio[Nothing, Boolean] =
-    guess.flatMap { guess =>
-      if guess == n then Sio.succeed(true)
-      else
-        val msg =
-          if guess > n then PrintLine("Too high!")
-          else PrintLine("Too low!")
+def CheckNumber(n: Int, guessSio: Sio[Nothing, Int], tries: Int = 1): Sio[Nothing, Int] =
+  guessSio.flatMap { guess =>
+    if guess == n then Sio.succeed(tries)
+    else
+      val msg =
+        if guess > n then PrintLine("Too high!")
+        else PrintLine("Too low!")
 
-        msg *> checkNumber(n, GuessNumber(maxNumber))
-    }
-
-  checkNumber(n, GuessNumber(maxNumber))
+      msg *> CheckNumber(n, guessSio, tries + 1)
+  }
 
 def GuessingGameProgram(maxNumber: Int) =
   for
     randomNumber <- RandomNumber(maxNumber)
-    success      <- CheckNumber(randomNumber, maxNumber)
-  yield success
+    tries        <- CheckNumber(randomNumber, GuessNumber(maxNumber))
+  yield tries
 
 @main def hello: Unit =
   HelloWorldProgram.runUnsafeSync match
@@ -58,6 +55,6 @@ def GuessingGameProgram(maxNumber: Int) =
 
 @main def guess: Unit =
   GuessingGameProgram(10).runUnsafeSync match
-    case Result.Success(s)   => println(s"Concrats you found the number")
+    case Result.Success(s)   => println(s"Concrats you found the number within $s tries")
     case Result.Error(e)     => println(s"Error: $e")
     case Result.Exception(t) => println(s"Exception $t")
