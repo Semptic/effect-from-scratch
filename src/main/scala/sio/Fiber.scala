@@ -100,7 +100,7 @@ private[sio] final class FiberImpl[E, A](
       val state = currentState.get()
       state match
         case State.Running(callbacks) =>
-          if (currentState.compareAndSet(state, State.Done(value)))
+          if currentState.compareAndSet(state, State.Done(value)) then
             notOk = false
             val result = value match
               case Result.Success(s)    => Sio.succeedNow(s)
@@ -116,7 +116,7 @@ private[sio] final class FiberImpl[E, A](
   }
 
   private def continueOrComplete(value: Result[Any, Any]) =
-    if (stack.isEmpty)
+    if stack.isEmpty then
       loop = false
       value match
         case Result.Success(s)    => complete(Result.Success(s.asInstanceOf[A]))
@@ -133,7 +133,7 @@ private[sio] final class FiberImpl[E, A](
 
   private def run(): Unit =
     while (loop) do
-      if (shouldInterrupt)
+      if shouldInterrupt then
         isInterrupting = true
         currentSio = Sio.interrupt()
       else

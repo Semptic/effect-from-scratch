@@ -62,7 +62,7 @@ sealed trait Sio[+E, +A]:
   final def <*[E1 >: E, B](that: => Sio[E1, B]): Sio[E1, A] = this.zipLeft(that)
 
   final def repeat(n: Int): Sio[E, A] =
-    if (n <= 0) this
+    if n <= 0 then this
     else this.zipRight(this.repeat(n - 1))
 
   final def forever: Sio[E, Unit] = this *> this.forever
