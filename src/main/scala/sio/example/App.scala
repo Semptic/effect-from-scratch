@@ -38,9 +38,7 @@ def CheckNumber(n: Int, guessSio: Sio[Nothing, Int]): Sio[Nothing, Int] =
   def newGuess(tries: Int) =
     guessSio.flatMap(guess => Sio.succeed((guess, tries + 1)))
 
-  newGuess(0).repeatUntil { case (guess, tries) =>
-    printHelp(guess) *> newGuess(tries)
-  }(_._1 == n)
+  newGuess(0).repeatUntil { case (guess, tries) => printHelp(guess) *> newGuess(tries) }(_._1 == n)
     .map(_._2)
 
 def GuessingGameProgram(maxNumber: Int) =
