@@ -65,6 +65,12 @@ sealed trait Sio[+E, +A]:
     if n <= 0 then this
     else this.zipRight(this.repeat(n - 1))
 
+  final def repeatUntil[E1 >: E, B >: A](sio: B => Sio[E1, B])(predicate: B => Boolean): Sio[E1, B] =
+    this.flatMap(sio).flatMap { b =>
+      if predicate(b) then Sio.succeedNow(b)
+      else Sio.succeedNow(b).repeatUntil(sio)(predicate)
+    }
+
   final def forever: Sio[E, Unit] = this *> this.forever
 
   final def fork: Sio[Nothing, Fiber[E, A]] = Sio.Fork(this)

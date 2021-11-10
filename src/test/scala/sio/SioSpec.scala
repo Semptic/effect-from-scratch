@@ -112,6 +112,22 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     runs shouldBe n
 
+  it should "repeat until condition is reached" in new Fixture:
+    var sideEffects = 0
+
+    val sio =
+      Sio
+        .succeed(0)
+        .repeatUntil(a =>
+          Sio.succeed {
+            sideEffects += 1
+            a + 1
+          }
+        )(_ > 10)
+        .runUnsafeSync shouldBe Result.Success(11)
+
+      sideEffects shouldBe 11
+
   it should "for comprehension" in new Fixture:
     val sio = for {
       a      <- Sio.succeed(7)
