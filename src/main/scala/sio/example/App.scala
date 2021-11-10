@@ -51,12 +51,10 @@ def GuessingGameProgram(maxNumber: Int) =
 
 @main def hello: Unit =
   HelloWorldProgram.runUnsafeSync match
-    case Result.Success(s)   => println(s"Success: $s")
-    case Result.Error(e)     => println(s"Error: $e")
-    case Result.Exception(t) => println(s"Exception $t")
+    case Result.Success(s) => println(s"Success: $s")
+    case e                 => println(s"Error: $e")
 
 @main def guess: Unit =
   GuessingGameProgram(10).runUnsafeSync match
-    case Result.Success(s)   => println(s"Concrats you found the number within $s tries")
-    case Result.Error(e)     => println(s"Error: $e")
-    case Result.Exception(t) => println(s"Exception $t")
+    case Result.Success(s) => println(s"Concrats you found the number within $s tries")
+    case e                 => println(s"Error: $e")
