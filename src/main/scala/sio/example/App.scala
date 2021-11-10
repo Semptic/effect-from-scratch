@@ -30,16 +30,18 @@ def GuessNumber(maxNumber: Int): Sio[Nothing, Int] =
     number <- ReadLine().flatMap(s => Sio.succeed(s.toInt))
   yield number
 
-def CheckNumber(n: Int, guessSio: Sio[Nothing, Int], tries: Int = 1): Sio[Nothing, Int] =
-  guessSio.flatMap { guess =>
-    if guess == n then Sio.succeed(tries)
-    else
-      val msg =
-        if guess > n then PrintLine("Too high!")
-        else PrintLine("Too low!")
+def CheckNumber(n: Int, guessSio: Sio[Nothing, Int]): Sio[Nothing, Int] =
+  def printHelp(guess: Int) =
+    if guess > n then PrintLine("Too high!")
+    else PrintLine("Too low!")
 
-      msg *> CheckNumber(n, guessSio, tries + 1)
-  }
+  def newGuess(tries: Int) =
+    guessSio.flatMap(guess => Sio.succeed((guess, tries + 1)))
+
+  newGuess(0).repeatUntil { case (guess, tries) =>
+    printHelp(guess) *> newGuess(tries)
+  }(_._1 == n)
+    .map(_._2)
 
 def GuessingGameProgram(maxNumber: Int) =
   for
