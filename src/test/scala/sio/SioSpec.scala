@@ -337,10 +337,12 @@ class SioSpec extends AnyFlatSpec with Matchers:
                 }.forever.catchSome { case Sio.ErrorCause.Interrupted() =>
                   Sio.succeed(42)
                 }.fork
-      fiber2 <- Sio.async { complete =>
+      fiber2 <- Sio.succeed {
                   Thread.sleep(500)
+                }.flatMap { _ =>
+                  fiber1.interrupt()
+                }.map { _ =>
                   sendMessage("Interrupting")
-                  complete(fiber1.interrupt())
                 }.fork
       a <- fiber1.join
       _ <- fiber2.join
@@ -360,7 +362,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     reversedMessages(0) shouldBe "Done"
     reversedMessages(
       1
-    ) shouldBe "Interrupting" // This test is wonky, due to its parallelism there could be one Running between Done and Interrupting
+    ) shouldBe "Interrupting"
 
   it should "be able to mark something as uninteruptible" in new Fixture:
     val program = for {
@@ -372,10 +374,12 @@ class SioSpec extends AnyFlatSpec with Matchers:
                   .forever).catchSome { case Sio.ErrorCause.Interrupted() =>
                   Sio.succeed(42)
                 }.fork
-      fiber2 <- Sio.async { complete =>
+      fiber2 <- Sio.succeed {
                   Thread.sleep(500)
+                }.flatMap { _ =>
+                  fiber1.interrupt()
+                }.map { _ =>
                   sendMessage("Interrupting")
-                  complete(fiber1.interrupt())
                 }.fork
       a <- fiber1.join
       _ <- fiber2.join
@@ -391,6 +395,8 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val reversedMessages = messages.toArray.nn.reverse.toList
 
+    println(reversedMessages)
+
     reversedMessages.length shouldBe 12
 
     reversedMessages(0) shouldBe "Done"
@@ -398,10 +404,10 @@ class SioSpec extends AnyFlatSpec with Matchers:
     reversedMessages(2) shouldBe "Running"
     reversedMessages(3) shouldBe "Running"
     reversedMessages(4) shouldBe "Running"
-    reversedMessages(5) shouldBe "Running"
     reversedMessages(
-      6
-    ) shouldBe "Interrupting" // This test is wonky, due to its parallelism this message could be the 5th or 6th position
+      5
+    ) shouldBe "Interrupting"
+    reversedMessages(6) shouldBe "Running"
     reversedMessages(7) shouldBe "Running"
     reversedMessages(8) shouldBe "Running"
     reversedMessages(9) shouldBe "Running"
