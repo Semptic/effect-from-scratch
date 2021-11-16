@@ -411,3 +411,24 @@ class SioSpec extends AnyFlatSpec with Matchers:
     reversedMessages(9) shouldBe "Running"
     reversedMessages(10) shouldBe "Running"
     reversedMessages(11) shouldBe "Running"
+
+  it should "always run ensuring" in new Fixture:
+    Sio
+      .succeed(1 / 0)
+      .ensuring(Sio.succeed(sendMessage("ensuring 1")))
+      .ensuring(Sio.succeed(sendMessage("ensuring 2")))
+      .catchSome { case _ =>
+        Sio.succeed {
+          sendMessage("catch"); 42
+        }
+      }
+      .ensuring(Sio.succeed(sendMessage("ensuring 3")))
+      .ensuring(Sio.succeed(sendMessage("ensuring 4")))
+      .runUnsafeSync shouldBe Result.Success(42)
+
+    messages.size() shouldBe 5
+    messages.poll() shouldBe "ensuring 1"
+    messages.poll() shouldBe "ensuring 2"
+    messages.poll() shouldBe "catch"
+    messages.poll() shouldBe "ensuring 3"
+    messages.poll() shouldBe "ensuring 4"

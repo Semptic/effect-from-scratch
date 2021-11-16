@@ -9,40 +9,46 @@ import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
 
 sealed trait Sio[+E, +A]:
-  final def ensuring[E1 >: E, B >: A](always: => Sio[E1, Unit]): Sio[E1, Unit] =
-    this.fold(
-      _ => always,
-      _ => always
+  final def ensuring(finalizer: Sio[Nothing, Any]): Sio[E, A] =
+    this.foldAll(
+      e => finalizer *> Sio.Fail(() => e),
+      s => finalizer *> Sio.succeedNow(s)
     )
 
-  final def catchError[E2, B >: A](failure: E => Sio[E2, B]): Sio[E2, B] =
+  final def catchError[E1 >: E, B >: A](failure: E => Sio[E1, B]): Sio[E1, B] =
     this.fold(failure, a => Sio.succeedNow(a))
 
-  final def catchSome[E2 >: E, B >: A](failure: PartialFunction[Sio.ErrorCause[E], Sio[E2, B]]): Sio[E2, B] = Sio.Fold(
-    this,
-    failure.orElse {
-      case Sio.ErrorCause.Error(e)      => Sio.fail(e)
-      case Sio.ErrorCause.Exception(t)  => Sio.die(t)
-      case Sio.ErrorCause.Killed()      => Sio.kill()
-      case Sio.ErrorCause.Interrupted() => Sio.interrupt()
-    },
-    s => Sio.succeedNow(s)
-  )
+  final def catchSome[E2 >: E, B >: A](failure: PartialFunction[Sio.ErrorCause[E], Sio[E2, B]]): Sio[E2, B] =
+    this.foldSome(
+      failure,
+      s => Sio.succeedNow(s)
+    )
 
   final def catchException[E2 >: E, B >: A](exception: Throwable => Sio[E2, B]): Sio[E2, B] =
     this.catchSome { case Sio.ErrorCause.Exception(t) =>
       exception(t)
     }
 
-  final def fold[E2, B](failure: E => Sio[E2, B], success: A => Sio[E2, B]): Sio[E2, B] =
-    Sio.Fold(
-      this,
-      {
-        case Sio.ErrorCause.Error(e)      => failure(e)
+  final def foldAll[E2, B >: A](failure: Sio.ErrorCause[E] => Sio[E2, B], success: A => Sio[E2, B]): Sio[E2, B] =
+    Sio.Fold(this, failure, success)
+
+  final def foldSome[E1 >: E, B >: A](
+    failure: PartialFunction[Sio.ErrorCause[E], Sio[E1, B]],
+    success: A => Sio[E1, B]
+  ): Sio[E1, B] =
+    this.foldAll(
+      failure.orElse {
+        case Sio.ErrorCause.Error(e)      => Sio.fail(e)
         case Sio.ErrorCause.Exception(t)  => Sio.die(t)
         case Sio.ErrorCause.Killed()      => Sio.kill()
         case Sio.ErrorCause.Interrupted() => Sio.interrupt()
       },
+      success
+    )
+
+  final def fold[E1 >: E, B >: A](failure: E => Sio[E1, B], success: A => Sio[E1, B]): Sio[E1, B] =
+    this.foldSome(
+      { case Sio.ErrorCause.Error(e) => failure(e) },
       success
     )
 
