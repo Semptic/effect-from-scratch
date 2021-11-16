@@ -8,34 +8,39 @@ import scala.annotation.tailrec
 import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
 
-sealed trait Sio[+E, +A]:
-  final def ensuring(finalizer: Sio[Nothing, Any]): Sio[E, A] =
+sealed trait Sio[-R, +E, +A]:
+  final def ensuring[R1 <: R](finalizer: Sio[R1, Nothing, Any]): Sio[R1, E, A] =
     this.foldAll(
       e => finalizer *> Sio.Fail(() => e),
       s => finalizer *> Sio.succeedNow(s)
     )
 
-  final def catchError[E1 >: E, B >: A](failure: E => Sio[E1, B]): Sio[E1, B] =
+  final def catchError[R1 <: R, E1 >: E, B >: A](failure: E => Sio[R1, E1, B]): Sio[R1, E1, B] =
     this.fold(failure, a => Sio.succeedNow(a))
 
-  final def catchSome[E2 >: E, B >: A](failure: PartialFunction[Sio.ErrorCause[E], Sio[E2, B]]): Sio[E2, B] =
+  final def catchSome[R1 <: R, E2 >: E, B >: A](
+    failure: PartialFunction[Sio.ErrorCause[E], Sio[R1, E2, B]]
+  ): Sio[R1, E2, B] =
     this.foldSome(
       failure,
       s => Sio.succeedNow(s)
     )
 
-  final def catchException[E2 >: E, B >: A](exception: Throwable => Sio[E2, B]): Sio[E2, B] =
+  final def catchException[R1 <: R, E2 >: E, B >: A](exception: Throwable => Sio[R1, E2, B]): Sio[R1, E2, B] =
     this.catchSome { case Sio.ErrorCause.Exception(t) =>
       exception(t)
     }
 
-  final def foldAll[E2, B >: A](failure: Sio.ErrorCause[E] => Sio[E2, B], success: A => Sio[E2, B]): Sio[E2, B] =
+  final def foldAll[R1 <: R, E2, B >: A](
+    failure: Sio.ErrorCause[E] => Sio[R1, E2, B],
+    success: A => Sio[R1, E2, B]
+  ): Sio[R1, E2, B] =
     Sio.Fold(this, failure, success)
 
-  final def foldSome[E1 >: E, B >: A](
-    failure: PartialFunction[Sio.ErrorCause[E], Sio[E1, B]],
-    success: A => Sio[E1, B]
-  ): Sio[E1, B] =
+  final def foldSome[R1 <: R, E1 >: E, B >: A](
+    failure: PartialFunction[Sio.ErrorCause[E], Sio[R1, E1, B]],
+    success: A => Sio[R1, E1, B]
+  ): Sio[R1, E1, B] =
     this.foldAll(
       failure.orElse {
         case Sio.ErrorCause.Error(e)      => Sio.fail(e)
@@ -46,48 +51,48 @@ sealed trait Sio[+E, +A]:
       success
     )
 
-  final def fold[E1 >: E, B >: A](failure: E => Sio[E1, B], success: A => Sio[E1, B]): Sio[E1, B] =
+  final def fold[R1 <: R, E1 >: E, B >: A](failure: E => Sio[R1, E1, B], success: A => Sio[R1, E1, B]): Sio[R1, E1, B] =
     this.foldSome(
       { case Sio.ErrorCause.Error(e) => failure(e) },
       success
     )
 
-  final def undisturbed: Sio[E, A] = Sio.Undisturbed(this)
+  final def undisturbed: Sio[R, E, A] = Sio.Undisturbed(this)
 
-  final def shift(ec: ExecutionContext): Sio[E, A] = this <* Sio.Shift(ec)
+  final def shift(ec: ExecutionContext): Sio[R, E, A] = this <* Sio.Shift(ec)
 
-  final def flatMap[E1 >: E, B](cont: A => Sio[E1, B]): Sio[E1, B] = Sio.FlatMap(this, cont)
+  final def flatMap[R1 <: R, E1 >: E, B](cont: A => Sio[R1, E1, B]): Sio[R1, E1, B] = Sio.FlatMap(this, cont)
 
-  final def map[B](cont: A => B): Sio[E, B] = this.flatMap(a => Sio.succeedNow(cont(a)))
+  final def map[B](cont: A => B): Sio[R, E, B] = this.flatMap(a => Sio.succeedNow(cont(a)))
 
-  final def zip[E1 >: E, B](that: Sio[E1, B]): Sio[E1, (A, B)] = this.zipWith(that)((a, b) => (a, b))
+  final def zip[R1 <: R, E1 >: E, B](that: Sio[R1, E1, B]): Sio[R1, E1, (A, B)] = this.zipWith(that)((a, b) => (a, b))
 
-  final def zipWith[E1 >: E, B, C](that: => Sio[E1, B])(f: (A, B) => C): Sio[E1, C] =
+  final def zipWith[R1 <: R, E1 >: E, B, C](that: => Sio[R1, E1, B])(f: (A, B) => C): Sio[R1, E1, C] =
     this.flatMap(a => that.flatMap(b => Sio.succeedNow(f(a, b))))
 
-  final def zipRight[E1 >: E, B](that: => Sio[E1, B]): Sio[E1, B] = this.zipWith(that)((_, b) => b)
+  final def zipRight[R1 <: R, E1 >: E, B](that: => Sio[R1, E1, B]): Sio[R1, E1, B] = this.zipWith(that)((_, b) => b)
 
-  final def *>[E1 >: E, B](that: => Sio[E1, B]): Sio[E1, B] = this.zipRight(that)
+  final def *>[R1 <: R, E1 >: E, B](that: => Sio[R1, E1, B]): Sio[R1, E1, B] = this.zipRight(that)
 
-  final def zipLeft[E1 >: E, B](that: => Sio[E1, B]): Sio[E1, A] = that.zipRight(this)
+  final def zipLeft[R1 <: R, E1 >: E, B](that: => Sio[R1, E1, B]): Sio[R1, E1, A] = that.zipRight(this)
 
-  final def <*[E1 >: E, B](that: => Sio[E1, B]): Sio[E1, A] = this.zipLeft(that)
+  final def <*[R1 <: R, E1 >: E, B](that: => Sio[R1, E1, B]): Sio[R1, E1, A] = this.zipLeft(that)
 
-  final def repeat(n: Int): Sio[E, A] =
+  final def repeat(n: Int): Sio[R, E, A] =
     if n <= 0 then this
     else this.zipRight(this.repeat(n - 1))
 
-  final def repeatUntil[E1 >: E, B >: A](sio: B => Sio[E1, B])(predicate: B => Boolean): Sio[E1, B] =
+  final def repeatUntil[R1 <: R, E1 >: E, B >: A](sio: B => Sio[R1, E1, B])(predicate: B => Boolean): Sio[R1, E1, B] =
     this.flatMap(sio).flatMap { b =>
       if predicate(b) then Sio.succeedNow(b)
       else Sio.succeedNow(b).repeatUntil(sio)(predicate)
     }
 
-  final def forever: Sio[E, Unit] = this *> this.forever
+  final def forever: Sio[R, E, Unit] = this *> this.forever
 
-  final def fork: Sio[Nothing, Fiber[E, A]] = Sio.Fork(this)
+  final def fork: Sio[R, Nothing, Fiber[E, A]] = Sio.Fork(this)
 
-  private def done[E1 >: E, B](f: Result[E, A] => Sio[E1, B]): Sio[E1, B] =
+  private def done[R1 <: R, E1 >: E, B](f: Result[E, A] => Sio[R1, E1, B]): Sio[R1, E1, B] =
     Sio.Fold(
       this,
       {
@@ -114,48 +119,49 @@ sealed trait Sio[+E, +A]:
     latch.await()
     result.nn
 
-  final def runUnsafe: Fiber[E, A] = FiberImpl(this)
+  final def runUnsafe: Fiber[E, A] = FiberImpl(this.asInstanceOf[Sio[Any, E, A]])
 
 object Sio:
   private[sio] def defaultExecutionContext = ExecutionContext.global
 
-  def fail[E](error: => E): Sio[E, Nothing] = Fail(() => ErrorCause.Error(error))
+  def fail[E](error: => E): Sio[Any, E, Nothing] = Fail(() => ErrorCause.Error(error))
 
-  def die(throwable: => Throwable): Sio[Nothing, Nothing] = Fail(() => ErrorCause.Exception(throwable))
+  def die(throwable: => Throwable): Sio[Any, Nothing, Nothing] = Fail(() => ErrorCause.Exception(throwable))
 
-  def succeed[A](thunk: => A): Sio[Nothing, A] = Succeed(() => thunk)
+  def succeed[R, A](thunk: => A): Sio[R, Nothing, A] = Succeed(() => thunk)
 
-  def async[E, A](f: (Sio[E, A] => Any) => Any): Sio[E, A] = Async(f)
+  def async[R, E, A](f: (Sio[R, E, A] => Any) => Any): Sio[R, E, A] = Async(f)
 
-  private[sio] def kill(): Sio[Nothing, Nothing] = Fail(() => ErrorCause.Killed())
+  private[sio] def kill(): Sio[Any, Nothing, Nothing] = Fail(() => ErrorCause.Killed())
 
-  private[sio] def interrupt(): Sio[Nothing, Nothing] = Fail(() => ErrorCause.Interrupted())
+  private[sio] def interrupt(): Sio[Any, Nothing, Nothing] = Fail(() => ErrorCause.Interrupted())
 
-  private[sio] def succeedNow[A](value: A): Sio[Nothing, A] = SucceedNow(value)
+  private[sio] def succeedNow[R, A](value: A): Sio[R, Nothing, A] = SucceedNow(value)
 
-  private[sio] def shift(ec: ExecutionContext): Sio[Nothing, Unit] = Sio.Shift(ec)
+  private[sio] def shift(ec: ExecutionContext): Sio[Any, Nothing, Unit] = Sio.Shift(ec)
 
-  private[sio] final case class Fail[E](error: () => ErrorCause[E]) extends Sio[E, Nothing]
+  private[sio] final case class Fail[E](error: () => ErrorCause[E]) extends Sio[Any, E, Nothing]
 
-  private[sio] final case class SucceedNow[A](value: A) extends Sio[Nothing, A]
+  private[sio] final case class SucceedNow[R, A](value: A) extends Sio[R, Nothing, A]
 
-  private[sio] final case class Succeed[A](thunk: () => A) extends Sio[Nothing, A]
+  private[sio] final case class Succeed[R, A](thunk: () => A) extends Sio[R, Nothing, A]
 
-  private[sio] final case class Async[E, A](f: (Sio[E, A] => Any) => Any) extends Sio[E, A]
+  private[sio] final case class Async[R, E, A](f: (Sio[R, E, A] => Any) => Any) extends Sio[R, E, A]
 
-  private[sio] final case class Fold[E, E2, A, B](
-    sio: Sio[E, A],
-    failure: ErrorCause[E] => Sio[E2, B],
-    success: A => Sio[E2, B]
-  ) extends Sio[E2, B]
+  private[sio] final case class Fold[R, R1 <: R, E, E2, A, B](
+    sio: Sio[R, E, A],
+    failure: ErrorCause[E] => Sio[R1, E2, B],
+    success: A => Sio[R1, E2, B]
+  ) extends Sio[R1, E2, B]
 
-  private[sio] final case class FlatMap[E, A, B](sio: Sio[E, A], cont: A => Sio[E, B]) extends Sio[E, B]
+  private[sio] final case class FlatMap[R, R1 <: R, E, A, B](sio: Sio[R, E, A], cont: A => Sio[R1, E, B])
+      extends Sio[R1, E, B]
 
-  private[sio] final case class Fork[E, A](sio: Sio[E, A]) extends Sio[Nothing, Fiber[E, A]]
+  private[sio] final case class Fork[R, E, A](sio: Sio[R, E, A]) extends Sio[R, Nothing, Fiber[E, A]]
 
-  private[sio] final case class Shift(executionContext: ExecutionContext) extends Sio[Nothing, Unit]
+  private[sio] final case class Shift(executionContext: ExecutionContext) extends Sio[Any, Nothing, Unit]
 
-  private[sio] final case class Undisturbed[E, A](sio: Sio[E, A]) extends Sio[E, A]
+  private[sio] final case class Undisturbed[R, E, A](sio: Sio[R, E, A]) extends Sio[R, E, A]
 
   private[sio] enum ErrorCause[+E]:
     case Error(error: E) extends ErrorCause[E]

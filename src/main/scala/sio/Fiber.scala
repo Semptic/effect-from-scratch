@@ -5,28 +5,29 @@ import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
 
 trait Fiber[+E, +A]:
-  def join: Sio[E, A]
+  def join: Sio[Any, E, A]
 
-  def kill(): Sio[Nothing, Unit]
+  def kill(): Sio[Any, Nothing, Unit]
 
-  def interrupt(): Sio[Nothing, Unit]
+  def interrupt(): Sio[Any, Nothing, Unit]
 
 private[sio] final class FiberImpl[E, A](
-  startSio: Sio[E, A],
+  startSio: Sio[Any, E, A],
   startExecutionContext: ExecutionContext = Sio.defaultExecutionContext
 ) extends Fiber[E, A]:
-  type Erased = Sio[Any, Any]
-  type Cont   = Any => Erased
+  type Erased       = Sio[Any, Any, Any]
+  type Cont         = Any => Erased
+  type ErrorHandler = Sio.Fold[Any, Any, Any, Any, Any, Any]
 
-  private def erase[E, A](sio: Sio[E, A]): Erased = sio.asInstanceOf[Erased]
+  private def erase[R, E, A](sio: Sio[R, E, A]): Erased = sio.asInstanceOf[Erased]
 
   private enum State:
     case Done(result: Result[E, A])
-    case Running(waiter: List[Sio[E, A] => Any])
+    case Running(waiter: List[Sio[Any, E, A] => Any])
 
   private enum Continuation:
     case Succeess(cont: Cont)
-    case ErrorAndSucceess(fold: Sio.Fold[Any, Any, Any, Any])
+    case ErrorAndSucceess(fold: ErrorHandler)
 
     def isSuccessContinuation: Boolean = this match
       case _: Succeess => true
@@ -56,16 +57,16 @@ private[sio] final class FiberImpl[E, A](
   private var loop                       = true
   private var fiberThread: Thread | Null = null
 
-  override def join: Sio[E, A] = Sio.async(await)
+  override def join: Sio[Any, E, A] = Sio.async(await)
 
-  override def kill(): Sio[Nothing, Unit] =
+  override def kill(): Sio[Any, Nothing, Unit] =
     Sio.succeed {
       loop = false
       fiberThread.nn.interrupt() // This is not thread-safe, this must be improved
       complete(Result.Killed())
     }
 
-  override def interrupt(): Sio[Nothing, Unit] = Sio.succeed {
+  override def interrupt(): Sio[Any, Nothing, Unit] = Sio.succeed {
     isInterrupted.set(true)
   }
 
@@ -74,7 +75,7 @@ private[sio] final class FiberImpl[E, A](
     run()
   }
 
-  private def await(callback: Sio[E, A] => Any): Unit =
+  private def await(callback: Sio[Any, E, A] => Any): Unit =
     var notOk = true
 
     while (notOk) do
@@ -172,7 +173,7 @@ private[sio] final class FiberImpl[E, A](
 
               stack.push(
                 Continuation.ErrorAndSucceess(
-                  fold.asInstanceOf[Sio.Fold[Any, Any, Any, Any]]
+                  fold.asInstanceOf[ErrorHandler]
                 )
               )
             case Sio.Undisturbed(sio) =>

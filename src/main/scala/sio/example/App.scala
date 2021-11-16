@@ -4,7 +4,7 @@ import sio.{Result, Sio}
 
 import scala.util.Random
 
-def printEffect(msg: String): Sio[Nothing, Unit] = Sio.succeed(println(msg))
+def printEffect(msg: String): Sio[Any, Nothing, Unit] = Sio.succeed(println(msg))
 
 def msg = "I was compiled by Scala 3. :)"
 
@@ -13,24 +13,24 @@ def HelloWorldProgram = Sio
   .flatMap(printEffect)
   .zipRight(Sio.succeed(msg))
   .flatMap(printEffect)
-  .zipRight(Sio.async[String, Int] { complete =>
+  .zipRight(Sio.async[Any, String, Int] { complete =>
     Random.nextInt(3) match
       case 0 => complete(Sio.succeed(12))
       case 1 => complete(Sio.fail("Bad luck"))
       case 2 => complete(Sio.die(Exception("Really bad luck")))
   })
 
-def PrintLine(msg: String): Sio[Nothing, Unit]      = Sio.succeed(println(msg))
-def ReadLine(): Sio[Nothing, String]                = Sio.succeed(scala.io.StdIn.readLine())
-def RandomNumber(maxNumber: Int): Sio[Nothing, Int] = Sio.succeed(Random.nextInt(maxNumber))
+def PrintLine(msg: String): Sio[Any, Nothing, Unit]      = Sio.succeed(println(msg))
+def ReadLine(): Sio[Any, Nothing, String]                = Sio.succeed(scala.io.StdIn.readLine())
+def RandomNumber(maxNumber: Int): Sio[Any, Nothing, Int] = Sio.succeed(Random.nextInt(maxNumber))
 
-def GuessNumber(maxNumber: Int): Sio[Nothing, Int] =
+def GuessNumber(maxNumber: Int): Sio[Any, Nothing, Int] =
   for
     _      <- PrintLine(s"Guess a number between 0 (inclusive) and $maxNumber (exclusive):")
     number <- ReadLine().flatMap(s => Sio.succeed(s.toInt))
   yield number
 
-def CheckNumber(n: Int, guessSio: Sio[Nothing, Int]): Sio[Nothing, Int] =
+def CheckNumber(n: Int, guessSio: Sio[Any, Nothing, Int]): Sio[Any, Nothing, Int] =
   def printHelp(guess: Int) =
     if guess > n then PrintLine("Too high!")
     else PrintLine("Too low!")
