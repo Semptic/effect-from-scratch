@@ -375,7 +375,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
                   Sio.succeed(42)
                 }.fork
       fiber2 <- Sio.succeed {
-                  Thread.sleep(500)
+                  Thread.sleep(450)
                 }.flatMap { _ =>
                   fiber1.interrupt()
                 }.map { _ =>
@@ -395,19 +395,17 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     val reversedMessages = messages.toArray.nn.reverse.toList
 
-    println(reversedMessages)
-
-    reversedMessages.length shouldBe 12
+    reversedMessages.count(_ == "Running") shouldBe 10
 
     reversedMessages(0) shouldBe "Done"
     reversedMessages(1) shouldBe "Running"
     reversedMessages(2) shouldBe "Running"
     reversedMessages(3) shouldBe "Running"
     reversedMessages(4) shouldBe "Running"
+    reversedMessages(5) shouldBe "Running"
     reversedMessages(
-      5
+      6
     ) shouldBe "Interrupting"
-    reversedMessages(6) shouldBe "Running"
     reversedMessages(7) shouldBe "Running"
     reversedMessages(8) shouldBe "Running"
     reversedMessages(9) shouldBe "Running"

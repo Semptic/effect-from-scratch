@@ -176,10 +176,13 @@ private[sio] final class FiberImpl[E, A](
                 )
               )
             case Sio.Undisturbed(sio) =>
+              val oldIsInterruptible = isInterruptible
               isInterruptible = false
-              currentSio = sio *> Sio.succeed {
-                isInterruptible = true
-              }
+              currentSio = sio.ensuring(
+                Sio.succeed {
+                  isInterruptible = oldIsInterruptible
+                }
+              )
         catch
           case throwable: Throwable =>
             currentSio = Sio.die(throwable)

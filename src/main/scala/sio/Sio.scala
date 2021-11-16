@@ -9,6 +9,12 @@ import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
 
 sealed trait Sio[+E, +A]:
+  final def ensuring[E1 >: E, B >: A](always: => Sio[E1, Unit]): Sio[E1, Unit] =
+    this.fold(
+      _ => always,
+      _ => always
+    )
+
   final def catchError[E2, B >: A](failure: E => Sio[E2, B]): Sio[E2, B] =
     this.fold(failure, a => Sio.succeedNow(a))
 
