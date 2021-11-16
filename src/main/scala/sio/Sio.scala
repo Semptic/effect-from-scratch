@@ -8,6 +8,8 @@ import scala.annotation.tailrec
 import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
 
+type IO[E, A] = Sio[Any, E, A]
+
 sealed trait Sio[-R, +E, +A]:
   final def ensuring[R1 <: R](finalizer: Sio[R1, Nothing, Any]): Sio[R1, E, A] =
     this.foldAll(
@@ -119,7 +121,7 @@ sealed trait Sio[-R, +E, +A]:
     latch.await()
     result.nn
 
-  final def runUnsafe: Fiber[E, A] = FiberImpl(this.asInstanceOf[Sio[Any, E, A]])
+  final def runUnsafe: Fiber[E, A] = FiberImpl(this.asInstanceOf[IO[E, A]])
 
 object Sio:
   private[sio] def defaultExecutionContext = ExecutionContext.global

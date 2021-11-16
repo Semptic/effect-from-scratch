@@ -5,17 +5,17 @@ import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
 
 trait Fiber[+E, +A]:
-  def join: Sio[Any, E, A]
+  def join: IO[E, A]
 
-  def kill(): Sio[Any, Nothing, Unit]
+  def kill(): IO[Nothing, Unit]
 
-  def interrupt(): Sio[Any, Nothing, Unit]
+  def interrupt(): IO[Nothing, Unit]
 
 private[sio] final class FiberImpl[E, A](
-  startSio: Sio[Any, E, A],
+  startSio: IO[E, A],
   startExecutionContext: ExecutionContext = Sio.defaultExecutionContext
 ) extends Fiber[E, A]:
-  type Erased       = Sio[Any, Any, Any]
+  type Erased       = IO[Any, Any]
   type Cont         = Any => Erased
   type ErrorHandler = Sio.Fold[Any, Any, Any, Any, Any, Any]
 
@@ -23,7 +23,7 @@ private[sio] final class FiberImpl[E, A](
 
   private enum State:
     case Done(result: Result[E, A])
-    case Running(waiter: List[Sio[Any, E, A] => Any])
+    case Running(waiter: List[IO[E, A] => Any])
 
   private enum Continuation:
     case Succeess(cont: Cont)
@@ -57,16 +57,16 @@ private[sio] final class FiberImpl[E, A](
   private var loop                       = true
   private var fiberThread: Thread | Null = null
 
-  override def join: Sio[Any, E, A] = Sio.async(await)
+  override def join: IO[E, A] = Sio.async(await)
 
-  override def kill(): Sio[Any, Nothing, Unit] =
+  override def kill(): IO[Nothing, Unit] =
     Sio.succeed {
       loop = false
       fiberThread.nn.interrupt() // This is not thread-safe, this must be improved
       complete(Result.Killed())
     }
 
-  override def interrupt(): Sio[Any, Nothing, Unit] = Sio.succeed {
+  override def interrupt(): IO[Nothing, Unit] = Sio.succeed {
     isInterrupted.set(true)
   }
 
@@ -75,7 +75,7 @@ private[sio] final class FiberImpl[E, A](
     run()
   }
 
-  private def await(callback: Sio[Any, E, A] => Any): Unit =
+  private def await(callback: IO[E, A] => Any): Unit =
     var notOk = true
 
     while (notOk) do
