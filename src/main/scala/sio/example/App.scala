@@ -13,7 +13,7 @@ def HelloWorldProgram = Sio
   .flatMap(printEffect)
   .zipRight(Sio.succeed(msg))
   .flatMap(printEffect)
-  .zipRight(Sio.async[Any, String, Int] { complete =>
+  .zipRight(Sio.async[String, Int] { complete =>
     Random.nextInt(3) match
       case 0 => complete(Sio.succeed(12))
       case 1 => complete(Sio.fail("Bad luck"))

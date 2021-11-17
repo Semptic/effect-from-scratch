@@ -52,6 +52,7 @@ private[sio] final class FiberImpl[E, A](
   private var isInterruptible = true
 
   private val stack                      = Stack.empty[Continuation]
+  private val envStack                   = Stack.empty[Any]
   private var currentSio                 = erase(startSio)
   private var currentEc                  = startExecutionContext
   private var loop                       = true
@@ -184,6 +185,12 @@ private[sio] final class FiberImpl[E, A](
                   isInterruptible = oldIsInterruptible
                 }
               )
+            case Sio.Provide(sio, env) =>
+              envStack.push(env)
+              currentSio = erase(sio).ensuring(Sio.succeed(envStack.pop()))
+            case Sio.Access(f) =>
+              val env = envStack.head
+              currentSio = f(env)
         catch
           case throwable: Throwable =>
             currentSio = Sio.die(throwable)

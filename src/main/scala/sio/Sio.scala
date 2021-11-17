@@ -11,6 +11,9 @@ import scala.concurrent.ExecutionContext
 type IO[E, A] = Sio[Any, E, A]
 
 sealed trait Sio[-R, +E, +A]:
+  final def provide(environment: R): Sio[Any, E, A] =
+    Sio.Provide(this, environment)
+
   final def ensuring[R1 <: R](finalizer: Sio[R1, Nothing, Any]): Sio[R1, E, A] =
     this.foldAll(
       e => finalizer *> Sio.Fail(() => e),
@@ -106,7 +109,7 @@ sealed trait Sio[-R, +E, +A]:
       s => f(Result.Success(s))
     )
 
-  final def runUnsafeSync: Result[E, A] =
+  final def runUnsafeSync(implicit ev: Any <:< R): Result[E, A] =
     val latch                       = CountDownLatch(1)
     var result: Result[E, A] | Null = null
 
@@ -121,34 +124,41 @@ sealed trait Sio[-R, +E, +A]:
     latch.await()
     result.nn
 
-  final def runUnsafe: Fiber[E, A] = FiberImpl(this.asInstanceOf[IO[E, A]])
+  final def runUnsafe(implicit ev: Any <:< R): Fiber[E, A] = FiberImpl(this.asInstanceOf[IO[E, A]])
 
 object Sio:
   private[sio] def defaultExecutionContext = ExecutionContext.global
+
+  def access[R, E, A](f: R => Sio[R, E, A]): Sio[R, E, A] =
+    Access(f)
 
   def fail[E](error: => E): Sio[Any, E, Nothing] = Fail(() => ErrorCause.Error(error))
 
   def die(throwable: => Throwable): Sio[Any, Nothing, Nothing] = Fail(() => ErrorCause.Exception(throwable))
 
-  def succeed[R, A](thunk: => A): Sio[R, Nothing, A] = Succeed(() => thunk)
+  def succeed[A](thunk: => A): Sio[Any, Nothing, A] = Succeed(() => thunk)
 
-  def async[R, E, A](f: (Sio[R, E, A] => Any) => Any): Sio[R, E, A] = Async(f)
+  def async[E, A](f: (Sio[Any, E, A] => Any) => Any): Sio[Any, E, A] = Async(f)
 
   private[sio] def kill(): Sio[Any, Nothing, Nothing] = Fail(() => ErrorCause.Killed())
 
   private[sio] def interrupt(): Sio[Any, Nothing, Nothing] = Fail(() => ErrorCause.Interrupted())
 
-  private[sio] def succeedNow[R, A](value: A): Sio[R, Nothing, A] = SucceedNow(value)
+  private[sio] def succeedNow[A](value: A): Sio[Any, Nothing, A] = SucceedNow(value)
 
   private[sio] def shift(ec: ExecutionContext): Sio[Any, Nothing, Unit] = Sio.Shift(ec)
 
+  private[sio] final case class Access[R, E, A](f: R => Sio[R, E, A]) extends Sio[R, E, A]
+
+  private[sio] final case class Provide[R, E, A](sio: Sio[R, E, A], environment: R) extends Sio[Any, E, A]
+
   private[sio] final case class Fail[E](error: () => ErrorCause[E]) extends Sio[Any, E, Nothing]
 
-  private[sio] final case class SucceedNow[R, A](value: A) extends Sio[R, Nothing, A]
+  private[sio] final case class SucceedNow[A](value: A) extends Sio[Any, Nothing, A]
 
-  private[sio] final case class Succeed[R, A](thunk: () => A) extends Sio[R, Nothing, A]
+  private[sio] final case class Succeed[A](thunk: () => A) extends Sio[Any, Nothing, A]
 
-  private[sio] final case class Async[R, E, A](f: (Sio[R, E, A] => Any) => Any) extends Sio[R, E, A]
+  private[sio] final case class Async[E, A](f: (Sio[Any, E, A] => Any) => Any) extends Sio[Any, E, A]
 
   private[sio] final case class Fold[R, R1 <: R, E, E2, A, B](
     sio: Sio[R, E, A],

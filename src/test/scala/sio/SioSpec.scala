@@ -48,7 +48,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     Sio
       .succeed(7)
       .flatMap(a =>
-        Sio.async[Any, Nothing, Int] { complete =>
+        Sio.async[Nothing, Int] { complete =>
           Future {
             val result = a * 7
             complete(Sio.succeed(result))
@@ -140,7 +140,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
   it should "run on multiple threads" in new Fixture:
     val sio = for {
       fiberA <- Sio
-                  .async[Any, Nothing, Int] { complete =>
+                  .async[Nothing, Int] { complete =>
                     Future {
                       Thread.sleep(2000)
                       sendMessage("Hello, world!")
@@ -149,7 +149,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
                   }
                   .fork
       fiberB <- Sio
-                  .async[Any, Nothing, Int] { complete =>
+                  .async[Nothing, Int] { complete =>
                     Future {
                       Thread.sleep(1000)
                       sendMessage("Hello, sio!")
@@ -173,7 +173,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
     messages.poll() shouldBe "Hello, world!"
 
   it should "change the execution context" in new Fixture:
-    val async = Sio.async[Any, Nothing, Long] { complete =>
+    val async = Sio.async[Nothing, Long] { complete =>
       Thread.sleep(1000)
       sendMessage("Hello, sio!")
       complete(Sio.succeed(Thread.currentThread().nn.getId))
@@ -301,7 +301,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
   it should "kill fiber" in new Fixture:
     val program = for {
       fiber1 <- Sio
-                  .async[Any, Nothing, Int] { complete =>
+                  .async[Nothing, Int] { complete =>
                     while (true) do
                       sendMessage("Running")
                       Thread.sleep(10)
@@ -309,7 +309,7 @@ class SioSpec extends AnyFlatSpec with Matchers:
                   }
                   .fork
       fiber2 <- Sio
-                  .async[Any, Nothing, Unit] { complete =>
+                  .async[Nothing, Unit] { complete =>
                     Thread.sleep(500)
                     sendMessage("Killing")
                     complete(fiber1.kill())
@@ -432,3 +432,12 @@ class SioSpec extends AnyFlatSpec with Matchers:
     messages.poll() shouldBe "catch"
     messages.poll() shouldBe "ensuring 3"
     messages.poll() shouldBe "ensuring 4"
+
+  it should "take an environment" in new Fixture:
+    val sio = Sio.access[String, Nothing, Unit](string => Sio.succeed(sendMessage(string)))
+
+    (sio.provide("Hello, Environment") *> sio.provide("Hey, Joe")).runUnsafeSync shouldBe Result.Success(())
+
+    messages.size() shouldBe 2
+    messages.poll() shouldBe "Hello, Environment"
+    messages.poll() shouldBe "Hey, Joe"
