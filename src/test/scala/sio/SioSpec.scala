@@ -500,3 +500,13 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     messages.size() shouldBe 1
     messages.poll() shouldBe "42"
+
+  it should "not compile if Has is missint from env" in new Fixture:
+    val intSio = Sio.access[Has[Int], Nothing, Int](has => Sio.succeed(has.get))
+    val strSio = Sio.access[Has[String], Nothing, String](has => Sio.succeed(has.get))
+
+    val program = (intSio zip strSio)
+
+    val intEnv: Has[Int] = Has(42)
+
+    "program.provide(intEnv).runUnsafeSync" shouldNot compile
