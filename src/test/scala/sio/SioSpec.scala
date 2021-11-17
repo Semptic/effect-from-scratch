@@ -481,3 +481,22 @@ class SioSpec extends AnyFlatSpec with Matchers:
     program
       .provide(env)
       .runUnsafeSync shouldBe Result.Success(((42, "Hello, Joe"), 42.0))
+
+  it should "make services possible" in new Fixture:
+    trait Console:
+      def println(message: Any): Sio[Any, Nothing, Unit]
+
+    object Console:
+      val live: Console = new Console:
+        override def println(message: Any): Sio[Any, Nothing, Unit] = Sio.succeed(sendMessage(message.toString))
+
+    val sio = Sio.access[Has[Int], Nothing, Int](has => Sio.succeed(has.get))
+
+    val program = sio.flatMap(n => Sio.service[Console].flatMap(_.println(n)))
+
+    val env = Has(42) & Has(Console.live)
+
+    program.provide(env).runUnsafeSync shouldBe Result.Success(())
+
+    messages.size() shouldBe 1
+    messages.poll() shouldBe "42"

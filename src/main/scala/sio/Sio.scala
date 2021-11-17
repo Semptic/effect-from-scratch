@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
 import scala.collection.mutable.Stack
 import scala.concurrent.ExecutionContext
+import scala.reflect.ClassTag
 
 type IO[E, A] = Sio[Any, E, A]
 
@@ -128,6 +129,9 @@ sealed trait Sio[-R, +E, +A]:
 
 object Sio:
   private[sio] def defaultExecutionContext = ExecutionContext.global
+
+  def service[R: ClassTag]: Sio[Has[R], Nothing, R] =
+    access[Has[R], Nothing, R](env => Sio.succeedNow(env.get))
 
   def environmnent[R]: Sio[R, Nothing, R] =
     access(env => Sio.succeedNow(env))
