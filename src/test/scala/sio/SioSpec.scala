@@ -449,3 +449,18 @@ class SioSpec extends AnyFlatSpec with Matchers:
     messages.size() shouldBe 2
     messages.poll() shouldBe "Hello, Environment"
     messages.poll() shouldBe "Hey, Joe"
+
+  it should "handle nested environments correctly" in new Fixture:
+    val sio = Sio.access[Int, Nothing, Unit](n => Sio.succeed(sendMessage(n.toString)))
+
+    val program =
+      for
+        x <- Sio.environmnent[Int]
+        _ <- (sio *> Sio.fail("Nooooo")).provide(42).catchSome(_ => Sio.succeed(()))
+        y <- Sio.environmnent[Int]
+      yield x + y
+
+    program.provide(10).runUnsafeSync shouldBe Result.Success(20)
+
+    messages.size() shouldBe 1
+    messages.poll() shouldBe "42"

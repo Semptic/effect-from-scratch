@@ -129,6 +129,9 @@ sealed trait Sio[-R, +E, +A]:
 object Sio:
   private[sio] def defaultExecutionContext = ExecutionContext.global
 
+  def environmnent[R]: Sio[R, Nothing, R] =
+    access(env => Sio.succeedNow(env))
+
   def access[R, E, A](f: R => Sio[R, E, A]): Sio[R, E, A] =
     Access(f)
 
