@@ -464,3 +464,20 @@ class SioSpec extends AnyFlatSpec with Matchers:
 
     messages.size() shouldBe 1
     messages.poll() shouldBe "42"
+
+  it should "allow to mix types in the environment" in new Fixture:
+    val intSio = Sio.access[Has[Int], Nothing, Int](has => Sio.succeed(has.get))
+    val strSio = Sio.access[Has[String], Nothing, String](has => Sio.succeed(has.get))
+    val dblSio = Sio.access[Has[Double], Nothing, Double](has => Sio.succeed(has.get))
+
+    val program = (intSio zip strSio zip dblSio)
+
+    val intEnv: Has[Int]    = Has(42)
+    val strEnv: Has[String] = Has("Hello, Joe")
+    val dblEnv: Has[Double] = Has(42.0)
+
+    val env = intEnv & strEnv & dblEnv
+
+    program
+      .provide(env)
+      .runUnsafeSync shouldBe Result.Success(((42, "Hello, Joe"), 42.0))
