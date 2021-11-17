@@ -1,5 +1,6 @@
 package sio
 
+import scala.annotation.implicitNotFound
 import scala.reflect.ClassTag
 
 final case class Has[A] private[sio] (map: Map[String, Any])
@@ -9,7 +10,11 @@ object Has:
     Has[A](Map(classTag.toString -> value))
 
 extension [Self <: Has[_]](self: Self)
-  def get[A](implicit ev: Self <:< Has[A], classTag: ClassTag[A]): A =
+  def get[A](implicit
+    @implicitNotFound("Has[${A}] is not part of ${Self}")
+    ev: Self <:< Has[A],
+    classTag: ClassTag[A]
+  ): A =
     self.map(classTag.toString).asInstanceOf[A]
 
   def &[That <: Has[_]](that: That): Self & That =
