@@ -433,10 +433,18 @@ class SioSpec extends AnyFlatSpec with Matchers:
     messages.poll() shouldBe "ensuring 3"
     messages.poll() shouldBe "ensuring 4"
 
+  it should "not compile if environment is missing" in new Fixture:
+    val sio = Sio.access[Int, Nothing, Int](n => Sio.succeed(n))
+
+    "sio.runUnsafeSync" shouldNot compile
+
   it should "take an environment" in new Fixture:
     val sio = Sio.access[String, Nothing, Unit](string => Sio.succeed(sendMessage(string)))
 
-    (sio.provide("Hello, Environment") *> sio.provide("Hey, Joe")).runUnsafeSync shouldBe Result.Success(())
+    sio
+      .provide("Hello, Environment")
+      .zipRight(sio.provide("Hey, Joe"))
+      .runUnsafeSync shouldBe Result.Success(())
 
     messages.size() shouldBe 2
     messages.poll() shouldBe "Hello, Environment"
