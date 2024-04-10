@@ -11,6 +11,7 @@ trait Fiber[+E, +A]:
 
   def interrupt(): IO[Nothing, Unit]
 
+
 private[sio] final class FiberImpl[E, A](
   startSio: IO[E, A],
   startExecutionContext: ExecutionContext = Sio.defaultExecutionContext
@@ -57,6 +58,9 @@ private[sio] final class FiberImpl[E, A](
   private var currentEc                  = startExecutionContext
   private var loop                       = true
   private var fiberThread: Thread | Null = null
+  private val fiberId                    = java.util.UUID.randomUUID.toString
+
+  override final def toString: String = s"Fiber($fiberId)"
 
   override def join: IO[E, A] = Sio.async(await)
 
@@ -71,10 +75,14 @@ private[sio] final class FiberImpl[E, A](
     isInterrupted.set(true)
   }
 
-  startExecutionContext.execute { () =>
-    fiberThread = Thread.currentThread()
-    run()
+  private def execute() = {
+    startExecutionContext.execute { () =>
+      fiberThread = Thread.currentThread()
+      run()
+    }
   }
+
+  execute()
 
   private def await(callback: IO[E, A] => Any): Unit =
     var notOk = true
@@ -161,7 +169,14 @@ private[sio] final class FiberImpl[E, A](
               f { sio =>
                 currentSio = sio
                 loop = true
-                run()
+                if (Thread.currentThread() != fiberThread) {
+                  // We lost our original Thread. To stay in ExecutionContext and
+                  // to prevent creeping into the async thread we need to
+                  // get a thread from our pool
+                  execute()
+                } else {
+                  run()
+                }
               }
             case Sio.Fork(sio) =>
               val fiber = FiberImpl(sio, currentEc)
